@@ -10,6 +10,7 @@ const config: Config = {
     fontFamily,
     fontSize,
     borderWidth,
+    borderRadius: {},
     maxWidth,
     boxShadow: {},
     dropShadow: {},

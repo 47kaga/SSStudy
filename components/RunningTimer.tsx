@@ -1,0 +1,59 @@
+"use client";
+
+import { useActionState, useState, useSyncExternalStore } from "react";
+import { stopTimerAction } from "@/app/actions";
+import { Button } from "@/components/Button";
+import { elapsedSeconds, formatDuration } from "@/lib/time";
+
+type RunningTimerProps = {
+  projectTitle: string;
+  /** Server timestamp (ms) of when the session started. */
+  startedAtMs: number;
+  /** Server clock (ms) when the page was rendered, used to correct client clock skew. */
+  serverNowMs: number;
+};
+
+const TICK_MS = 250;
+const PLACEHOLDER = "-:--:--";
+
+// The store only reports the current time. Elapsed time is always computed from startedAtMs,
+// so a sleeping tab or a refresh can never lose or inflate time.
+function subscribe(onChange: () => void) {
+  const interval = setInterval(onChange, TICK_MS);
+  document.addEventListener("visibilitychange", onChange);
+  return () => {
+    clearInterval(interval);
+    document.removeEventListener("visibilitychange", onChange);
+  };
+}
+
+function getClientNow(): number {
+  return Math.floor(Date.now() / TICK_MS) * TICK_MS;
+}
+
+// Server render and hydration see null, so markup matches; the real value appears after mount.
+function getServerNow(): null {
+  return null;
+}
+
+export function RunningTimer({ projectTitle, startedAtMs, serverNowMs }: RunningTimerProps) {
+  const [skewMs] = useState(() => serverNowMs - Date.now());
+  const clientNow = useSyncExternalStore(subscribe, getClientNow, getServerNow);
+  const [, stopAction, stopping] = useActionState(stopTimerAction, undefined);
+
+  const display = clientNow === null ? PLACEHOLDER : formatDuration(elapsedSeconds(startedAtMs, clientNow + skewMs));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="truncate text-body">{projectTitle}</p>
+      <p className="text-title tabular-nums" aria-live="off">
+        {display}
+      </p>
+      <form action={stopAction}>
+        <Button type="submit" variant="primary" disabled={stopping}>
+          Stop
+        </Button>
+      </form>
+    </div>
+  );
+}

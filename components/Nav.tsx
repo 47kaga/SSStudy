@@ -9,6 +9,11 @@ const links = [
   { href: "/settings", label: "Settings" },
 ] as const;
 
+function isActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function Nav() {
   const pathname = usePathname();
 
@@ -18,7 +23,7 @@ export function Nav() {
       className="order-last grid shrink-0 grid-cols-3 border-t-heavy border-ink md:order-first md:border-t-0 md:border-b-heavy"
     >
       {links.map(({ href, label }) => {
-        const active = pathname === href;
+        const active = isActive(pathname, href);
         return (
           <Link
             key={href}
