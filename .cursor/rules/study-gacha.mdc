@@ -1,0 +1,75 @@
+---
+description: Study Gacha project spec, stack, workflow, design constraints, economy, timer rule and milestones
+alwaysApply: true
+---
+
+# Study Gacha
+
+A website that ties real study effort to gacha rewards. The user logs study time in a project folder, takes a short AI-generated quiz on their material, and earns pull shards based on time studied and quiz score. Shards are spent pulling pixel-art collectibles.
+
+Core loop: Study (timer) -> Quiz (score) -> Reward (shards -> pulls).
+
+## Stack
+
+- Next.js (App Router) + TypeScript (strict mode)
+- Tailwind CSS, with the theme restricted to the design tokens below
+- Zustand for client state (timer, inventory UI) only where React state is not enough
+- Prisma + SQLite for persistence, introduced at Milestone 2. Single local user until auth arrives in Milestone 8.
+- Anthropic Claude API, called only from Next.js route handlers (server side). The API key lives in `.env.local` and must never reach the client bundle.
+- Vitest for tests
+- Layout is desktop-first but must work at phone width. A PWA or app wrapper can come later; do not build for it now.
+
+## How to work
+
+- Do one milestone at a time. Build only what the current prompt asks for.
+- No extra features, no speculative abstractions, no "while I'm here" refactors.
+- Pure logic (shard formula, weighted pulls, quiz JSON validation) lives in plain TypeScript modules with no React or Next imports, and gets unit tests.
+- Game data (item list, rarity weights, formula constants) lives in data/config files, never hardcoded inside logic.
+- Before finishing a task, run lint, typecheck and tests, and fix failures.
+- Keep files small and named by purpose. If unsure where something goes, put it next to the feature that uses it.
+- If a requirement is ambiguous, ask instead of guessing.
+
+## Design constraints (non-negotiable)
+
+- **Typography:** system fonts only. Use a system font stack (`system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`), which renders San Francisco on Apple devices and Roboto on Android. No web fonts, no font downloads.
+- **Palette:** flat, solid background colors. Max 3 colors total for the UI. Absolute ban on gradients of any kind.
+- **Layout:** generous whitespace, stark grid lines, high structural contrast. Do not fill the UI with explanatory text boxes.
+- **Component philosophy:** early Apple, Notion, premium industrial design. Not a futuristic sci-fi dashboard.
+
+Interpretation:
+
+- The 3-color limit applies to the UI chrome (backgrounds, text, lines, buttons). Collectible artwork is the only exception and may use its own palette.
+- Rarity is shown with border weight or a corner mark, not with extra UI colors.
+- Tailwind's default palette is disabled. The theme defines only the 3 token colors, so off-palette classes simply do not exist.
+- All colors, spacing, and type sizes come from the theme. No inline hex values, arbitrary Tailwind values (`[#fff]`, `[13px]`) or magic numbers in components.
+- No box-shadow, blur, glow or gradient effects. Animations are flat and simple (scale, fade, translate).
+
+## Pixel art rules
+
+- Render sprites with `image-rendering: pixelated` and at integer multiples of their native size.
+- Until real art exists, use silhouettes and text-labeled placeholders. Placeholder sprites may be small palette-index grids rendered as flat squares.
+- Do not generate or embed binary art assets unless the prompt says to.
+
+## Economy reference (from the design doc)
+
+- Shards earned = (minutes studied / 10) x success rating (0 to 1)
+- Rarity pull rates: Common 70%, Rare 22%, Super Rare 6%, Ultra Rare 2%
+- Anti-abuse (added with the quiz milestone): minimum session length, one quiz per session, daily shard cap.
+- These numbers are starting values and must be easy to change in config.
+
+## Timer rule
+
+The timer stores a start timestamp and computes elapsed time from it. Never count by incrementing a counter in an interval, so a refresh, tab sleep or closed laptop does not lose or inflate time.
+
+## Milestones
+
+1. Skeleton and design tokens
+2. Projects and timer with session logging (Prisma + SQLite)
+3. Shard economy (pure function, tested)
+4. Gacha core: item table, weighted pull, inventory, collection grid
+5. Pull screen animation
+6. Quiz API route (Claude, validated JSON; text/markdown first, PDF later)
+7. Quiz UI wired to rewards, with anti-abuse limits
+8. Auth, deploy, real art, polish
+
+**Current milestone: 2**
