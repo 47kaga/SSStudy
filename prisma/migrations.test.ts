@@ -72,3 +72,66 @@ describe("migrations", () => {
     }
   });
 });
+
+// One quiz per session and one payout per session are enforced by the database, not by application code.
+describe("session unlock columns", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    applyAllMigrations(db);
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  function insertQuiz(sessionId: number | null): { code?: string } | null {
+    try {
+      db.prepare(
+        'INSERT INTO "Quiz" ("model", "questionsJson", "sourceChars", "latencyMs", "totalQuestions", "sessionId") VALUES (?, ?, ?, ?, ?, ?)',
+      ).run("test-model", "[]", 100, 1, 5, sessionId);
+      return null;
+    } catch (error) {
+      return error as { code?: string };
+    }
+  }
+
+  function insertLedger(sessionId: number | null): { code?: string } | null {
+    try {
+      db.prepare('INSERT INTO "ShardLedger" ("amount", "reason", "sessionId") VALUES (?, ?, ?)').run(
+        1,
+        sessionId === null ? "dev-grant" : `session:${sessionId}`,
+        sessionId,
+      );
+      return null;
+    } catch (error) {
+      return error as { code?: string };
+    }
+  }
+
+  it("rejects a second quiz for the same session", () => {
+    expect(insertQuiz(7)).toBeNull();
+    expect(insertQuiz(7)?.code).toBe("SQLITE_CONSTRAINT_UNIQUE");
+    expect(insertQuiz(8), "a different session is still allowed").toBeNull();
+  });
+
+  it("rejects a second payout for the same session", () => {
+    expect(insertLedger(7)).toBeNull();
+    expect(insertLedger(7)?.code).toBe("SQLITE_CONSTRAINT_UNIQUE");
+    expect(insertLedger(8), "a different session is still allowed").toBeNull();
+  });
+
+  it("accepts any number of quizzes and ledger rows without a session", () => {
+    for (let i = 0; i < 4; i += 1) {
+      expect(insertQuiz(null), `lab quiz ${i + 1} should be accepted`).toBeNull();
+      expect(insertLedger(null), `ledger row ${i + 1} without a session should be accepted`).toBeNull();
+    }
+  });
+
+  it("keeps the one-running-timer index in place after the session unlock migration", () => {
+    db.prepare('INSERT INTO "Project" ("title") VALUES (?)').run("Test project");
+    expect(insertSession(db, null)).toBeNull();
+    expect(insertSession(db, null)?.code, MISSING_INDEX).toBe("SQLITE_CONSTRAINT_UNIQUE");
+  });
+});

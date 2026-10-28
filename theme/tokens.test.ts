@@ -12,10 +12,11 @@ describe("design tokens", () => {
     }
   });
 
-  it("keeps spacing on the 4px grid and borders to hairline and heavy", () => {
+  it("keeps spacing on the 4px grid and borders to exactly hairline, medium and heavy", () => {
     for (const value of Object.values(spacing)) {
       expect(parseInt(value, 10) % 4).toBe(0);
     }
-    expect(Object.keys(borderWidth)).toEqual(["hairline", "heavy"]);
+    expect(Object.keys(borderWidth)).toEqual(["hairline", "medium", "heavy"]);
+    expect(Object.values(borderWidth)).toEqual(["1px", "2px", "3px"]);
   });
 });

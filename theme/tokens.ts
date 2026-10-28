@@ -16,6 +16,8 @@ export const spacing = {
   8: "32px",
   12: "48px",
   16: "64px",
+  24: "96px",
+  32: "128px",
 } as const;
 
 export const fontFamily = {
@@ -33,6 +35,7 @@ export const fontSize = {
 
 export const borderWidth = {
   hairline: "1px",
+  medium: "2px",
   heavy: "3px",
 } as const;
 

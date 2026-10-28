@@ -2,6 +2,8 @@ import "server-only";
 import { randomInt } from "node:crypto";
 import { quiz, quizSystemPrompt, quizTool, quizToolName } from "@/data/quiz";
 import { db } from "@/lib/db";
+import { checkSessionUnlock } from "@/lib/rewards";
+import { Prisma } from "@/generated/prisma/client";
 import { getAnthropic, MissingApiKeyError } from "./anthropic";
 import { runQuizAttempts, type CallModel } from "./attempts";
 import { buildMaterialMessage } from "./prompt";
@@ -21,7 +23,18 @@ export type QuizMeta = {
 
 export type GenerateResult =
   | { ok: true; quizId: number; publicQuiz: PublicQuestion[]; meta: QuizMeta }
-  | { ok: false; code: "rate-limited" | "insufficient" | "model-failure" | "missing-key"; message: string };
+  | {
+      ok: false;
+      code:
+        | "rate-limited"
+        | "insufficient"
+        | "model-failure"
+        | "missing-key"
+        | "session-not-found"
+        | "too-short"
+        | "already-has-quiz";
+      message: string;
+    };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANDOM_RANGE = 2 ** 32;
@@ -43,8 +56,23 @@ function failure(code: "model-failure"): GenerateResult {
   return { ok: false, code, message: "Quiz generation failed. Try again." };
 }
 
-/** `sourceText` must already have passed normalizeSource. It is never stored. */
-export async function generateQuiz(sourceText: string): Promise<GenerateResult> {
+const SESSION_MESSAGES = {
+  "session-not-found": "Session not found, or it has not ended yet.",
+  "too-short": "This session was too short to unlock a quiz.",
+  "already-has-quiz": "This session already has a quiz.",
+} as const;
+
+/**
+ * `sourceText` must already have passed normalizeSource. It is never stored. With a `sessionId` the quiz
+ * unlocks (and later pays for) that study session, and the session is checked before anything else, so a
+ * refused request never reaches the API. Without one it is a lab quiz that awards nothing.
+ */
+export async function generateQuiz(sourceText: string, sessionId: number | null = null): Promise<GenerateResult> {
+  if (sessionId !== null) {
+    const unlock = await checkSessionUnlock(sessionId);
+    if (!unlock.ok) return { ok: false, code: unlock.code, message: SESSION_MESSAGES[unlock.code] };
+  }
+
   const since = new Date(Date.now() - DAY_MS);
   const recent = await db.quiz.count({ where: { createdAt: { gte: since } } });
   if (recent >= quiz.generationsPer24h) {
@@ -130,17 +158,27 @@ export async function generateQuiz(sourceText: string): Promise<GenerateResult> 
   const shuffled = result.questions.map((question) => shuffleOptions(question, secureRandom));
   const { inputTokens, outputTokens, attempts } = result;
 
-  const row = await db.quiz.create({
-    data: {
-      model: modelName,
-      questionsJson: JSON.stringify(shuffled),
-      sourceChars: sourceText.length,
-      inputTokens,
-      outputTokens,
-      latencyMs,
-      totalQuestions: shuffled.length,
-    },
-  });
+  let row;
+  try {
+    row = await db.quiz.create({
+      data: {
+        model: modelName,
+        questionsJson: JSON.stringify(shuffled),
+        sourceChars: sourceText.length,
+        inputTokens,
+        outputTokens,
+        latencyMs,
+        totalQuestions: shuffled.length,
+        sessionId,
+      },
+    });
+  } catch (error) {
+    // Two requests for one session raced past the check: the unique index lets only the first store.
+    if (sessionId !== null && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { ok: false, code: "already-has-quiz", message: SESSION_MESSAGES["already-has-quiz"] };
+    }
+    throw error;
+  }
 
   return {
     ok: true,

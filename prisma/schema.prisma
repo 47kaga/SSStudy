@@ -43,6 +43,9 @@ model Quiz {
   gradedAt       DateTime?
   correctAnswers Int?
   totalQuestions Int
+  // The study session this quiz unlocks. A plain id (no foreign key), unique so a session gets one quiz.
+  // NULL for lab quizzes, which award nothing. SQLite allows many NULLs in a unique index.
+  sessionId      Int?      @unique
 }
 
 // Append-only. The shard balance is the sum of amounts. Never edit or delete rows.
@@ -50,7 +53,9 @@ model ShardLedger {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
   amount    Int // positive = earned or granted, negative = spent
-  reason    String // for example "dev-grant" or "pull:<itemKey>"
+  reason    String // for example "dev-grant", "pull:<itemKey>" or "session:<id>"
+  // Set only on rows that pay for a study session; unique so a session is paid at most once.
+  sessionId Int?     @unique
 }
 
 model InventoryItem {

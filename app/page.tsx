@@ -9,6 +9,7 @@ import { Screen } from "@/components/Screen";
 import { TimerPanel } from "@/components/TimerPanel";
 import { listProjects } from "@/lib/projects";
 import { getRunningSession, listRecentSessions } from "@/lib/sessions";
+import { devToolsEnabled } from "@/lib/shards";
 import { formatDuration } from "@/lib/time";
 
 export default async function StudyPage() {
@@ -22,7 +23,7 @@ export default async function StudyPage() {
       <Divider weight="heavy" />
       <div className="grid grid-cols-1 border-l-hairline border-t-hairline border-ink md:grid-cols-2">
         <Panel title="Timer">
-          <TimerPanel projects={projects.map(({ id, title }) => ({ id, title }))} running={running} />
+          <TimerPanel projects={projects.map(({ id, title }) => ({ id, title }))} running={running} devTools={devToolsEnabled()} />
         </Panel>
         <Panel title="Projects">
           {projects.length > 0 ? (

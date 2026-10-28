@@ -3,13 +3,15 @@
 import { refresh } from "next/cache";
 import { validateProjectTitle } from "@/lib/project-title";
 import { archiveProject, createProject } from "@/lib/projects";
-import { startSession, stopRunningSession } from "@/lib/sessions";
+import { shiftRunningSessionStart, startSession, stopRunningSession } from "@/lib/sessions";
+import { gachaData } from "@/data/gacha";
+import { pullDisplay, type PullDisplay } from "@/lib/gacha";
 import { grantDevShards, performPull } from "@/lib/shards";
 
 export type FormState = { error: string | null; value?: string };
 export type StartState = { error: string | null; code?: "already-running" };
-/** What the page may know about a pull: which item the server picked, and whether it was new. */
-export type PullState = { error: string | null; result?: { itemKey: string; isNew: boolean } };
+/** What the page may know about a pull: the display fields the server chose for the item it picked. */
+export type PullState = { error: string | null; result?: PullDisplay };
 
 export async function createProjectAction(_previous: FormState, formData: FormData): Promise<FormState> {
   const raw = formData.get("title");
@@ -43,6 +45,13 @@ export async function archiveProjectAction(projectId: number): Promise<void> {
   refresh();
 }
 
+// Development only: does nothing in production. Actions are reachable by direct POST, so the amount is
+// validated on the server against the fixed list in data/dev.ts.
+export async function devAddMinutesAction(minutes: number): Promise<void> {
+  await shiftRunningSessionStart(minutes);
+  refresh();
+}
+
 export async function stopTimerAction(): Promise<void> {
   await stopRunningSession();
   refresh();
@@ -54,7 +63,7 @@ export async function pullAction(): Promise<PullState> {
   // Refresh in every case so a stale page picks up the real balance.
   refresh();
   if (!result.ok) return { error: "Not enough shards." };
-  return { error: null, result: { itemKey: result.item.key, isNew: result.isNew } };
+  return { error: null, result: pullDisplay(gachaData, result.item, result.isNew) };
 }
 
 // Development only: does nothing in production. The amount is fixed in data/gacha.ts.

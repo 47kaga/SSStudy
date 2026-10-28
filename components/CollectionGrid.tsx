@@ -1,10 +1,9 @@
+import { Pips } from "@/components/Pips";
 import { gachaData } from "@/data/gacha";
 import type { OwnedItem } from "@/lib/inventory";
 
-// Rarity is shown by border weight and a corner label only. Full class names so Tailwind can see them.
-const BORDER = { hairline: "border-hairline", heavy: "border-heavy" } as const;
-
-const ULTRA_RARE_ID = "ultra-rare";
+// Rarity is shown by border weight and pips only. Full class names so Tailwind can see them.
+const BORDER = { hairline: "border-hairline", medium: "border-medium", heavy: "border-heavy" } as const;
 
 function itemNumber(index: number): string {
   return String(index + 1).padStart(2, "0");
@@ -20,8 +19,8 @@ export function CollectionGrid({ owned }: { owned: OwnedItem[] }) {
       {gachaData.items.map((item, index) => {
         const count = counts.get(item.key);
         const rarity = gachaData.rarities.find((entry) => entry.id === item.rarity);
-        // aspect-square, but a long name may make the cell taller instead of being clipped.
-        const cell = "relative flex flex-col gap-1 border-b-hairline border-r-hairline border-ink p-2";
+        // Content-height cells: a long name makes the whole row taller instead of being clipped.
+        const cell = "relative flex min-w-0 flex-col gap-1 border-b-hairline border-r-hairline border-ink p-2";
 
         if (count === undefined || !rarity) {
           return (
@@ -35,20 +34,22 @@ export function CollectionGrid({ owned }: { owned: OwnedItem[] }) {
         }
 
         return (
-          <div key={item.key} className={cell} aria-label={`${item.name}, ${rarity.label}, owned ${count}`}>
-            <span className="text-label tabular-nums">{itemNumber(index)}</span>
-            <span
-              className={`absolute right-1 top-1 text-label ${rarity.id === ULTRA_RARE_ID ? "text-accent" : "text-ink"}`}
-            >
-              {rarity.mark}
-            </span>
+          <div
+            key={item.key}
+            className={cell}
+            aria-label={`${item.name}, ${rarity.label} (${rarity.mark}), owned ${count}`}
+          >
+            <div className="flex items-start justify-between">
+              <span className="text-label tabular-nums">{itemNumber(index)}</span>
+              <Pips count={rarity.pips} tone={rarity.accent ? "accent" : "ink"} />
+            </div>
             <div className="flex flex-1 items-center justify-center">
               <div className={`h-12 w-12 border-ink bg-background md:h-16 md:w-16 ${BORDER[rarity.border]}`} />
             </div>
-            <p className="break-words text-caption">
-              {item.name}
-              {count > 1 ? ` x${count}` : ""}
-            </p>
+            <div className="flex items-end justify-between gap-1">
+              <p className="min-w-0 wrap-anywhere text-caption">{item.name}</p>
+              {count > 1 ? <span className="shrink-0 text-caption tabular-nums">x{count}</span> : null}
+            </div>
           </div>
         );
       })}

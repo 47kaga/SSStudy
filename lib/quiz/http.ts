@@ -2,7 +2,7 @@
 
 /**
  * The quiz endpoints are paid and unauthenticated, so they only exist outside production
- * until auth arrives (Milestone 8).
+ * until auth arrives (Milestone 10). The gating stays until then, including for the session quiz page's routes.
  */
 export function quizLabEnabled(): boolean {
   return process.env.NODE_ENV !== "production";

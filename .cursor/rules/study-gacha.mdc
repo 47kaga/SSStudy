@@ -14,7 +14,7 @@ Core loop: Study (timer) -> Quiz (score) -> Reward (shards -> pulls).
 - Next.js (App Router) + TypeScript (strict mode)
 - Tailwind CSS, with the theme restricted to the design tokens below
 - Zustand for client state (timer, inventory UI) only where React state is not enough
-- Prisma + SQLite for persistence, introduced at Milestone 2. Single local user until auth arrives in Milestone 8.
+- Prisma + SQLite for persistence, introduced at Milestone 2. Single local user until auth arrives in Milestone 10.
 - Anthropic Claude API, called only from Next.js route handlers (server side). The API key lives in `.env.local` and must never reach the client bundle.
 - Vitest for tests
 - Layout is desktop-first but must work at phone width. A PWA or app wrapper can come later; do not build for it now.
@@ -41,7 +41,7 @@ Core loop: Study (timer) -> Quiz (score) -> Reward (shards -> pulls).
 Interpretation:
 
 - The 3-color limit applies to the UI chrome (backgrounds, text, lines, buttons). Collectible artwork is the only exception and may use its own palette.
-- Rarity is shown with border weight or a corner mark, not with extra UI colors.
+- Rarity is shown with border weight (hairline, medium, heavy) and pips (small flat squares in the corner), not with extra UI colors. Ultra Rare may use the accent color.
 - Tailwind's default palette is disabled. The theme defines only the 3 token colors, so off-palette classes simply do not exist.
 - All colors, spacing, and type sizes come from the theme. No inline hex values, arbitrary Tailwind values (`[#fff]`, `[13px]`) or magic numbers in components.
 - No box-shadow, blur, glow or gradient effects. Animations are flat and simple (scale, fade, translate).
@@ -57,7 +57,13 @@ Interpretation:
 - Shards earned = (minutes studied / 10) x success rating (0 to 1)
 - Implementation (`lib/economy.ts`, `calculateShards`): shards are whole numbers, floored per session, computed with integer arithmetic from `correctAnswers / totalQuestions` (counts, not a float rating). One session counts at most `maxCountedSecondsPerSession`. Constants live in `data/economy.ts`. Invalid input throws a `RangeError`.
 - Rarity pull rates: Common 70%, Rare 22%, Super Rare 6%, Ultra Rare 2%
-- Anti-abuse (added with the quiz milestone): minimum session length, one quiz per session, daily shard cap. These are still planned for Milestone 7 and will extend `calculateShards`'s input.
+- Minimum session: 600 seconds (`minSessionSeconds`). A shorter session cannot unlock a quiz; exactly 600 is allowed (`sessionEligibility`).
+- Material cap: pasted material supports 2 seconds of study per character (`secondsPerSourceChar`), so 300 characters support 10 minutes. Counted time is the smallest of the session length, the per-session cap (4 hours) and the material cap (`calculateAward`).
+- Daily cap: 30 shards (`dailyShardCap`) from study sessions over a rolling 24 hours (`dailyWindowSeconds`), counted from ledger rows that have a `sessionId`. Not a calendar day.
+- One quiz per session, enforced by a unique index on `Quiz.sessionId`. A failed generation does not use up the quiz. A second payout for a session is blocked by a unique index on `ShardLedger.sessionId`.
+- Shards are awarded only inside the grading transaction (`lib/quiz/grading.ts` with `lib/rewards.ts`): claim the quiz, compute the award from stored data, append the ledger row, all or nothing. The ledger is append-only.
+- Dev tools (the +shards grant, the add-minutes buttons) are development-only. They do nothing and render nothing when `NODE_ENV === "production"`, validate on the server, and never edit or delete ledger rows. No tool resets the daily cap; change `dailyShardCap` in `data/economy.ts` to retest it.
+- Never send a duration, score or amount from the client. The server computes all of them from stored data.
 - These numbers are starting values and must be easy to change in config.
 
 ## Timer rule
@@ -66,6 +72,7 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 
 ## Quiz
 
+- Never send a duration, score or amount from the client.
 - Quizzes must not be beatable by option length. The model is asked for `candidateQuestions` (8) questions, ordered best first, and `selectBalanced` keeps the `questionCount` (5) most balanced. Kept questions obey `maxOptionLengthRatio` (2.0, by characters and by words) and `maxLengthTellQuestions` (1, for unique-longest-correct and for unique-shortest-correct). Do not weaken these without asking.
 
 ## Milestones
@@ -73,10 +80,12 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 1. Skeleton and design tokens (done)
 2. Projects and timer (done)
 3. Shard economy (done)
-4. Quiz spike: generate and grade quizzes from pasted text, with a throwaway lab page
-5. Gacha core: item table, weighted pull, inventory, collection grid
-6. Pull screen animation
-7. Quiz UI wired to rewards and sessions, with anti-abuse limits (minimum session length, one quiz per session, daily shard cap)
-8. Auth, deploy, real art, polish
+4. Quiz spike (done)
+5. Gacha core (done)
+6. Close the loop: a finished session unlocks one quiz, the quiz score awards shards, with anti-abuse limits and dev testing tools (this milestone)
+7. Room scene v1: pixel sprite component, fixed tile room, starter desk, character with idle and studying states driven by the running timer, timer HUD
+8. Room items and equipping
+9. Case-opening pull scene with the character in a corner
+10. Auth, deploy, real art, polish
 
-**Current milestone: 6**
+**Current milestone: 7**

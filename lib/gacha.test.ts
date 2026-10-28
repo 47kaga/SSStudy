@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { gachaData } from "@/data/gacha";
-import { pickWeighted, rollPull, validateGachaData, type GachaData, type RandomInt } from "./gacha";
+import { pickWeighted, pullDisplay, rollPull, validateGachaData, type GachaData, type RandomInt } from "./gacha";
 
 /** Small deterministic PRNG, so the distribution test is repeatable and cannot be flaky. */
 function mulberry32(seed: number): () => number {
@@ -157,11 +157,45 @@ describe("the real data", () => {
   });
 });
 
+describe("rarity display data", () => {
+  it("uses the planned border weight and pips per rarity, with only Ultra Rare in the accent color", () => {
+    const shown = Object.fromEntries(
+      gachaData.rarities.map((rarity) => [rarity.id, [rarity.border, rarity.pips, rarity.accent]]),
+    );
+    expect(shown).toEqual({
+      common: ["hairline", 1, false],
+      rare: ["medium", 2, false],
+      "super-rare": ["heavy", 3, false],
+      "ultra-rare": ["heavy", 4, true],
+    });
+  });
+});
+
+describe("pullDisplay", () => {
+  it("carries the display fields chosen from the rolled item", () => {
+    const item = gachaData.items.find((entry) => entry.key === "golden-hourglass")!;
+    expect(pullDisplay(gachaData, item, true)).toEqual({
+      itemKey: "golden-hourglass",
+      name: "Golden Hourglass",
+      rarityLabel: "Ultra Rare",
+      mark: "UR",
+      pips: 4,
+      border: "heavy",
+      accent: true,
+      isNew: true,
+    });
+  });
+
+  it("throws for an item whose rarity is not in the data", () => {
+    expect(() => pullDisplay(gachaData, { key: "x", name: "X", rarity: "mythic" }, false)).toThrow(/unknown rarity/);
+  });
+});
+
 describe("validateGachaData", () => {
   const valid: GachaData = {
     rarities: [
-      { id: "low", label: "Low", mark: "L", weight: 80, border: "hairline" },
-      { id: "high", label: "High", mark: "H", weight: 20, border: "heavy" },
+      { id: "low", label: "Low", mark: "L", weight: 80, border: "hairline", pips: 1, accent: false },
+      { id: "high", label: "High", mark: "H", weight: 20, border: "heavy", pips: 4, accent: true },
     ],
     items: [
       { key: "a", name: "A", rarity: "low" },
@@ -198,6 +232,13 @@ describe("validateGachaData", () => {
   it("rejects an item with an unknown rarity", () => {
     const data = { ...valid, items: [...valid.items, { key: "c", name: "C", rarity: "mythic" }] };
     expect(() => validateGachaData(data)).toThrow(/unknown rarity "mythic"/);
+  });
+
+  it("rejects pips outside 1 to 4", () => {
+    for (const pips of [0, 5, 2.5, -1]) {
+      const data = { ...valid, rarities: [valid.rarities[0], { ...valid.rarities[1], pips }] };
+      expect(() => validateGachaData(data)).toThrow(/pips/);
+    }
   });
 
   it("rejects a duplicate rarity id", () => {

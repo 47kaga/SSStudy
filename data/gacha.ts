@@ -7,12 +7,13 @@ export const gacha = {
 } as const;
 
 // Weights are integers out of 100 (checked by validateGachaData).
+// Rarity is shown by border weight and pips (small squares); only Ultra Rare uses the accent color.
 export const gachaData: GachaData = {
   rarities: [
-    { id: "common", label: "Common", mark: "C", weight: 70, border: "hairline" },
-    { id: "rare", label: "Rare", mark: "R", weight: 22, border: "hairline" },
-    { id: "super-rare", label: "Super Rare", mark: "SR", weight: 6, border: "heavy" },
-    { id: "ultra-rare", label: "Ultra Rare", mark: "UR", weight: 2, border: "heavy" },
+    { id: "common", label: "Common", mark: "C", weight: 70, border: "hairline", pips: 1, accent: false },
+    { id: "rare", label: "Rare", mark: "R", weight: 22, border: "medium", pips: 2, accent: false },
+    { id: "super-rare", label: "Super Rare", mark: "SR", weight: 6, border: "heavy", pips: 3, accent: false },
+    { id: "ultra-rare", label: "Ultra Rare", mark: "UR", weight: 2, border: "heavy", pips: 4, accent: true },
   ],
   // Original placeholder items. Order here is the grid order and the item number shown for unowned cells.
   items: [

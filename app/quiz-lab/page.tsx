@@ -1,4 +1,5 @@
-// Throwaway lab page for the quiz spike. Delete or replace in Milestone 7.
+// Dev tool for tuning the quiz pipeline. It is not part of the study loop: it posts no sessionId, so its
+// quizzes are not tied to a study session and award nothing. The real flow is /quiz/[sessionId].
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { quiz } from "@/data/quiz";

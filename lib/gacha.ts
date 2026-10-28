@@ -1,14 +1,35 @@
 // Pure gacha logic. No React, Next, Prisma or server-only imports, and no data imports:
 // the data is passed in, so tests can use the real tables or small broken ones.
 
+export type BorderWeight = "hairline" | "medium" | "heavy";
+
+export const MIN_PIPS = 1;
+export const MAX_PIPS = 4;
+
 export type Rarity = {
   id: string;
   label: string;
-  /** Short corner label, for example "SR". */
+  /** Short letter code, for example "SR". Shown to screen readers; the screen shows pips. */
   mark: string;
   /** Integer weight out of 100. */
   weight: number;
-  border: "hairline" | "heavy";
+  border: BorderWeight;
+  /** Number of small squares shown for this rarity, 1 to 4. */
+  pips: number;
+  /** Uses the accent color for its pips, label and hero panel. */
+  accent: boolean;
+};
+
+/** Everything the page needs to show one pull. Built on the server from the rolled item. */
+export type PullDisplay = {
+  itemKey: string;
+  name: string;
+  rarityLabel: string;
+  mark: string;
+  pips: number;
+  border: BorderWeight;
+  accent: boolean;
+  isNew: boolean;
 };
 
 export type GachaItem = {
@@ -75,6 +96,22 @@ export function rollPull(data: GachaData, randomInt: RandomInt): GachaItem {
   return pool[index];
 }
 
+/** The display fields for a rolled item, so the browser never needs the item or rarity tables. */
+export function pullDisplay(data: GachaData, item: GachaItem, isNew: boolean): PullDisplay {
+  const rarity = data.rarities.find((entry) => entry.id === item.rarity);
+  if (!rarity) throw new Error(`Item "${item.key}" has unknown rarity "${item.rarity}".`);
+  return {
+    itemKey: item.key,
+    name: item.name,
+    rarityLabel: rarity.label,
+    mark: rarity.mark,
+    pips: rarity.pips,
+    border: rarity.border,
+    accent: rarity.accent,
+    isNew,
+  };
+}
+
 /** Throws a clear error if the data cannot be pulled from correctly. */
 export function validateGachaData(data: GachaData): void {
   const rarityIds = new Set<string>();
@@ -86,6 +123,9 @@ export function validateGachaData(data: GachaData): void {
       throw new Error(`Rarity "${rarity.id}" has weight ${rarity.weight}; weights must be positive integers.`);
     }
     totalWeight += rarity.weight;
+    if (!Number.isInteger(rarity.pips) || rarity.pips < MIN_PIPS || rarity.pips > MAX_PIPS) {
+      throw new Error(`Rarity "${rarity.id}" has ${rarity.pips} pips; expected ${MIN_PIPS} to ${MAX_PIPS}.`);
+    }
   }
   if (totalWeight !== TOTAL_RARITY_WEIGHT) {
     throw new Error(`Rarity weights sum to ${totalWeight}, expected ${TOTAL_RARITY_WEIGHT}.`);

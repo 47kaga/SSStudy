@@ -13,11 +13,12 @@ const initialState: StartState = { error: null };
 type TimerPanelProps = {
   projects: { id: number; title: string }[];
   running: RunningSession | null;
+  devTools: boolean;
 };
 
 // Owns the start action state so a "timer already running" refusal stays visible even though
 // the page refresh swaps the start form for the running timer.
-export function TimerPanel({ projects, running }: TimerPanelProps) {
+export function TimerPanel({ projects, running, devTools }: TimerPanelProps) {
   const [state, action, pending] = useActionState(startTimerAction, initialState);
 
   if (running) {
@@ -29,6 +30,7 @@ export function TimerPanel({ projects, running }: TimerPanelProps) {
           projectTitle={running.projectTitle}
           startedAtMs={running.startedAtMs}
           serverNowMs={running.serverNowMs}
+          devTools={devTools}
         />
       </div>
     );

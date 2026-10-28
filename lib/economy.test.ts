@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { economy, type EconomyConfig } from "@/data/economy";
-import { calculateShards, type ShardInput } from "./economy";
+import { economy, type AwardConfig, type EconomyConfig } from "@/data/economy";
+import { calculateAward, calculateShards, sessionEligibility, type AwardInput, type ShardInput } from "./economy";
 
 const MINUTE = 60;
 const HOUR = 3600;
@@ -173,5 +173,216 @@ describe("invalid input", () => {
   it("throws a message that names the bad field", () => {
     expect(() => calculateShards({ ...valid, correctAnswers: 5 })).toThrow(/correctAnswers/);
     expect(() => calculateShards({ ...valid, durationSeconds: -5 })).toThrow(/durationSeconds/);
+  });
+});
+
+// ---- Milestone 6: eligibility and awards ----
+
+const award = (
+  durationSeconds: number,
+  sourceChars: number,
+  correctAnswers = 10,
+  totalQuestions = 10,
+  earnedInWindow = 0,
+  config?: AwardConfig,
+) => calculateAward({ durationSeconds, sourceChars, correctAnswers, totalQuestions, earnedInWindow }, config);
+
+describe("sessionEligibility", () => {
+  it("rejects 599 seconds, accepts exactly 600 and 601", () => {
+    expect(sessionEligibility(599)).toEqual({ eligible: false, reason: "too-short" });
+    expect(sessionEligibility(600)).toEqual({ eligible: true });
+    expect(sessionEligibility(601)).toEqual({ eligible: true });
+  });
+
+  it("accepts zero as too short", () => {
+    expect(sessionEligibility(0)).toEqual({ eligible: false, reason: "too-short" });
+  });
+
+  it("uses the given minimum", () => {
+    expect(sessionEligibility(59, { minSessionSeconds: 60 }).eligible).toBe(false);
+    expect(sessionEligibility(60, { minSessionSeconds: 60 }).eligible).toBe(true);
+  });
+
+  it("rejects bad input", () => {
+    expect(() => sessionEligibility(-1)).toThrow(RangeError);
+    expect(() => sessionEligibility(1.5)).toThrow(RangeError);
+    expect(() => sessionEligibility(Number.NaN)).toThrow(RangeError);
+    expect(() => sessionEligibility(600, { minSessionSeconds: -1 })).toThrow(RangeError);
+    expect(() => sessionEligibility(600, { minSessionSeconds: 1.5 })).toThrow(RangeError);
+  });
+});
+
+describe("calculateAward: counted time and what limited it", () => {
+  const cap = economy.maxCountedSecondsPerSession;
+  const plenty = 100_000; // material that supports far more than the cap
+
+  it("is limited by duration when the session is the shortest", () => {
+    const result = award(1800, plenty);
+    expect(result.countedSeconds).toBe(1800);
+    expect(result.limitedBy).toBe("duration");
+    expect(result.rawShards).toBe(3);
+  });
+
+  it("is limited by the session cap when the session is longer than the cap", () => {
+    const result = award(5 * HOUR, plenty);
+    expect(result.countedSeconds).toBe(cap);
+    expect(result.limitedBy).toBe("session-cap");
+    expect(result.rawShards).toBe(24);
+  });
+
+  it("is limited by the material when the paste is the smallest", () => {
+    const result = award(2 * HOUR, 900); // 900 chars support 1800 seconds
+    expect(result.countedSeconds).toBe(1800);
+    expect(result.limitedBy).toBe("material");
+    expect(result.rawShards).toBe(3);
+  });
+
+  it("300 characters support exactly 600 seconds, so a 4-hour session with 300 characters counts 600", () => {
+    const result = award(4 * HOUR, 300);
+    expect(result.countedSeconds).toBe(600);
+    expect(result.limitedBy).toBe("material");
+    expect(result.rawShards).toBe(1);
+  });
+
+  it("breaks ties in the order duration, session cap, material", () => {
+    expect(award(1800, 900).limitedBy).toBe("duration"); // duration = material
+    expect(award(cap, plenty).limitedBy).toBe("duration"); // duration = cap
+    expect(award(cap, cap / 2).limitedBy).toBe("duration"); // all three equal
+    expect(award(cap + 1, cap / 2).limitedBy).toBe("session-cap"); // cap = material, shorter than duration
+  });
+
+  it("counts nothing from an empty paste", () => {
+    const result = award(HOUR, 0);
+    expect(result.countedSeconds).toBe(0);
+    expect(result.limitedBy).toBe("material");
+    expect(result.awarded).toBe(0);
+  });
+
+  it("passes the inputs through to the breakdown", () => {
+    const result = award(3000, plenty, 3, 5);
+    expect(result).toMatchObject({ durationSeconds: 3000, correctAnswers: 3, totalQuestions: 5 });
+    expect(result.rawShards).toBe(3); // floor(3000 * 3 / (5 * 600)) = 3
+  });
+});
+
+describe("calculateAward: the daily cap", () => {
+  const cap = economy.dailyShardCap;
+
+  it("pays everything when the cap is not reached", () => {
+    const result = award(HOUR, 100_000, 10, 10, 10);
+    expect(result).toMatchObject({ rawShards: 6, dailyRemaining: cap - 10, cappedByDaily: false, awarded: 6 });
+  });
+
+  it("pays only what is left when the cap is partly used", () => {
+    const result = award(HOUR, 100_000, 10, 10, cap - 4);
+    expect(result).toMatchObject({ rawShards: 6, dailyRemaining: 4, cappedByDaily: true, awarded: 4 });
+  });
+
+  it("is not capped when the award exactly fits the remainder", () => {
+    const result = award(HOUR, 100_000, 10, 10, cap - 6);
+    expect(result).toMatchObject({ dailyRemaining: 6, cappedByDaily: false, awarded: 6 });
+  });
+
+  it("pays nothing when exactly at the cap", () => {
+    const result = award(HOUR, 100_000, 10, 10, cap);
+    expect(result).toMatchObject({ dailyRemaining: 0, cappedByDaily: true, awarded: 0 });
+  });
+
+  it("pays nothing when earnedInWindow is above the cap", () => {
+    const result = award(HOUR, 100_000, 10, 10, cap + 50);
+    expect(result).toMatchObject({ dailyRemaining: 0, cappedByDaily: true, awarded: 0 });
+  });
+
+  it("is not capped when there was nothing to pay anyway", () => {
+    const result = award(HOUR, 100_000, 0, 10, cap);
+    expect(result).toMatchObject({ rawShards: 0, cappedByDaily: false, awarded: 0 });
+  });
+
+  it("uses the given daily cap", () => {
+    const config: AwardConfig = { ...economy, dailyShardCap: 2 };
+    expect(award(HOUR, 100_000, 10, 10, 0, config)).toMatchObject({ awarded: 2, cappedByDaily: true });
+  });
+});
+
+describe("calculateAward: exactness", () => {
+  it("rawShards matches an exact BigInt computation", () => {
+    const unit = BigInt(economy.secondsPerShardUnit);
+    const sessionCap = economy.maxCountedSecondsPerSession;
+    const sources = [0, 1, 299, 300, 301, 1800, 7200, 10_000];
+    const mismatches: string[] = [];
+    let combinations = 0;
+
+    for (let duration = 0; duration <= sessionCap + 100; duration += 97) {
+      for (const chars of sources) {
+        const counted = BigInt(Math.min(duration, sessionCap, chars * economy.secondsPerSourceChar));
+        for (let total = 1; total <= 30; total += 1) {
+          for (let correct = 0; correct <= total; correct += 1) {
+            combinations += 1;
+            const expected = Number((counted * BigInt(correct)) / (BigInt(total) * unit));
+            const actual = award(duration, chars, correct, total).rawShards;
+            if (actual !== expected) mismatches.push(`${duration}s ${chars}ch ${correct}/${total}`);
+          }
+        }
+      }
+    }
+
+    expect(combinations).toBeGreaterThan(100_000);
+    expect(mismatches).toEqual([]);
+  }, 60_000);
+});
+
+describe("calculateAward: invalid input", () => {
+  const base: AwardInput = {
+    durationSeconds: 3600,
+    sourceChars: 1800,
+    correctAnswers: 3,
+    totalQuestions: 5,
+    earnedInWindow: 0,
+  };
+  const bad = (override: Partial<AwardInput>) =>
+    expect(() => calculateAward({ ...base, ...override })).toThrow(RangeError);
+
+  it("accepts the baseline", () => {
+    expect(() => calculateAward(base)).not.toThrow();
+  });
+
+  it("rejects bad durations", () => {
+    bad({ durationSeconds: -1 });
+    bad({ durationSeconds: 1.5 });
+    bad({ durationSeconds: Number.NaN });
+    bad({ durationSeconds: Number.POSITIVE_INFINITY });
+  });
+
+  it("rejects bad source sizes", () => {
+    bad({ sourceChars: -1 });
+    bad({ sourceChars: 1.5 });
+    bad({ sourceChars: Number.NaN });
+    bad({ sourceChars: Number.POSITIVE_INFINITY });
+    bad({ sourceChars: Number.MAX_SAFE_INTEGER });
+  });
+
+  it("rejects bad scores", () => {
+    bad({ totalQuestions: 0, correctAnswers: 0 });
+    bad({ correctAnswers: 6 });
+    bad({ correctAnswers: -1 });
+    bad({ correctAnswers: 1.5 });
+    bad({ totalQuestions: Number.NaN });
+  });
+
+  it("rejects bad earnedInWindow", () => {
+    bad({ earnedInWindow: -1 });
+    bad({ earnedInWindow: 1.5 });
+    bad({ earnedInWindow: Number.NaN });
+    bad({ earnedInWindow: Number.POSITIVE_INFINITY });
+  });
+
+  it("rejects an unusable config", () => {
+    const run = (override: Partial<AwardConfig>) => () => calculateAward(base, { ...economy, ...override });
+    expect(run({ secondsPerSourceChar: 0 })).toThrow(RangeError);
+    expect(run({ secondsPerSourceChar: 1.5 })).toThrow(RangeError);
+    expect(run({ dailyShardCap: -1 })).toThrow(RangeError);
+    expect(run({ dailyShardCap: 1.5 })).toThrow(RangeError);
+    expect(run({ dailyWindowSeconds: 0 })).toThrow(RangeError);
+    expect(run({ secondsPerShardUnit: 0 })).toThrow(RangeError);
   });
 });

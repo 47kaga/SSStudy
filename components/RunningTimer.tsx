@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState, useState, useSyncExternalStore } from "react";
-import { stopTimerAction } from "@/app/actions";
+import { devAddMinutesAction, stopTimerAction } from "@/app/actions";
 import { Button } from "@/components/Button";
+import { devTimerMinutes } from "@/data/dev";
 import { elapsedSeconds, formatDuration } from "@/lib/time";
 
 type RunningTimerProps = {
@@ -11,6 +12,8 @@ type RunningTimerProps = {
   startedAtMs: number;
   /** Server clock (ms) when the page was rendered, used to correct client clock skew. */
   serverNowMs: number;
+  /** Whether the development-only add-minutes buttons are offered. Decided on the server. */
+  devTools: boolean;
 };
 
 const TICK_MS = 250;
@@ -36,7 +39,7 @@ function getServerNow(): null {
   return null;
 }
 
-export function RunningTimer({ projectTitle, startedAtMs, serverNowMs }: RunningTimerProps) {
+export function RunningTimer({ projectTitle, startedAtMs, serverNowMs, devTools }: RunningTimerProps) {
   const [skewMs] = useState(() => serverNowMs - Date.now());
   const clientNow = useSyncExternalStore(subscribe, getClientNow, getServerNow);
   const [, stopAction, stopping] = useActionState(stopTimerAction, undefined);
@@ -54,6 +57,17 @@ export function RunningTimer({ projectTitle, startedAtMs, serverNowMs }: Running
           Stop
         </Button>
       </form>
+      {devTools ? (
+        <div className="flex flex-wrap gap-2">
+          {devTimerMinutes.map((minutes) => (
+            <form key={minutes} action={devAddMinutesAction.bind(null, minutes)}>
+              <Button type="submit" size="small" className="border-dashed">
+                +{minutes} min
+              </Button>
+            </form>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

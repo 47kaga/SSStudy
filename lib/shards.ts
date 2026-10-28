@@ -13,7 +13,7 @@ export type PullResult =
   | { ok: false; reason: "insufficient-shards" };
 
 /** The ledger is append-only, so the balance is always the sum of every row. */
-async function sumLedger(client: Prisma.TransactionClient): Promise<number> {
+export async function sumLedger(client: Prisma.TransactionClient): Promise<number> {
   const total = await client.shardLedger.aggregate({ _sum: { amount: true } });
   return total._sum.amount ?? 0;
 }

@@ -3,7 +3,10 @@ import { gradeStoredQuiz } from "@/lib/quiz/grading";
 
 const MAX_BODY_CHARS = 2000;
 
+// The body is only a quiz id and the chosen answers. The duration, the material size and every shard amount
+// are read from stored rows on the server.
 export async function POST(request: Request) {
+  // Gated until auth exists (Milestone 10): these routes are unauthenticated and the generate route is paid.
   if (!quizLabEnabled()) return notFoundResponse();
 
   const body = await readJsonObject(request, MAX_BODY_CHARS);
@@ -19,8 +22,8 @@ export async function POST(request: Request) {
 
   const result = await gradeStoredQuiz(quizId, answers as number[]);
   if (result.ok) {
-    const { correctAnswers, totalQuestions, results } = result;
-    return Response.json({ correctAnswers, totalQuestions, results });
+    const { correctAnswers, totalQuestions, results, award, balance } = result;
+    return Response.json({ correctAnswers, totalQuestions, results, award, balance });
   }
 
   switch (result.code) {
