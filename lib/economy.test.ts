@@ -82,19 +82,33 @@ describe("custom config", () => {
   });
 });
 
+describe("floating-point regression", () => {
+  // countedSeconds * (correct / total) / unit gives 2.9999999999999996 here and floors to 2.
+  it("2640 seconds at 15 of 22 gives exactly 3", () => {
+    expect(shards(2640, 15, 22)).toBe(3);
+  });
+});
+
 describe("exactness sweep", () => {
+  // Step 1 covers every second but takes about 6s; step 7 keeps the suite fast with every total (1-100).
+  const SWEEP_DURATION_STEP = 7;
+
   it("matches an exact BigInt computation for every combination", () => {
     const unit = BigInt(economy.secondsPerShardUnit);
     const cap = economy.maxCountedSecondsPerSession;
+    const durations: number[] = [];
+    for (let duration = 0; duration <= cap; duration += SWEEP_DURATION_STEP) durations.push(duration);
+    durations.push(cap, cap + 1); // the cap boundary itself, and one second past it
     const mismatches: string[] = [];
     let combinations = 0;
 
-    for (let duration = 0; duration <= cap; duration += 30) {
-      for (let total = 1; total <= 10; total += 1) {
+    for (const duration of durations) {
+      const counted = BigInt(Math.min(duration, cap));
+      for (let total = 1; total <= 100; total += 1) {
+        const denominator = BigInt(total) * unit;
         for (let correct = 0; correct <= total; correct += 1) {
           combinations += 1;
-          const counted = BigInt(Math.min(duration, cap));
-          const expected = Number((counted * BigInt(correct)) / (BigInt(total) * unit));
+          const expected = Number((counted * BigInt(correct)) / denominator);
           const actual = shards(duration, correct, total);
           if (actual !== expected) {
             mismatches.push(`${duration}s ${correct}/${total}: expected ${expected}, got ${actual}`);
@@ -103,9 +117,9 @@ describe("exactness sweep", () => {
       }
     }
 
-    expect(combinations).toBeGreaterThan(30000);
+    expect(combinations).toBeGreaterThan(1_000_000);
     expect(mismatches).toEqual([]);
-  });
+  }, 120_000);
 });
 
 describe("invalid input", () => {

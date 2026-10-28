@@ -29,3 +29,18 @@ model StudySession {
   @@index([projectId])
   @@index([startedAt])
 }
+
+// Spike model for the quiz pipeline. The pasted source text is never stored.
+model Quiz {
+  id             Int       @id @default(autoincrement())
+  createdAt      DateTime  @default(now())
+  model          String
+  questionsJson  String // full questions with correctIndex, already shuffled
+  sourceChars    Int
+  inputTokens    Int?
+  outputTokens   Int?
+  latencyMs      Int
+  gradedAt       DateTime?
+  correctAnswers Int?
+  totalQuestions Int
+}

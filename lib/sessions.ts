@@ -40,7 +40,8 @@ export async function getRunningSession(): Promise<RunningSession | null> {
 // The server clock is the only clock: startedAt is set here, never taken from the client.
 export async function startSession(projectId: number): Promise<StartResult> {
   const project = await db.project.findUnique({ where: { id: projectId } });
-  if (!project) return { ok: false, reason: "no-such-project" };
+  // An archived project counts as missing, so a stale tab cannot start a timer on it.
+  if (!project || project.archivedAt) return { ok: false, reason: "no-such-project" };
   if (await getRunningSession()) return { ok: false, reason: "already-running" };
 
   try {

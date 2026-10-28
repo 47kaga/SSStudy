@@ -66,13 +66,13 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 
 ## Milestones
 
-1. Skeleton and design tokens
-2. Projects and timer with session logging (Prisma + SQLite)
-3. Shard economy (pure function, tested)
-4. Gacha core: item table, weighted pull, inventory, collection grid
-5. Pull screen animation
-6. Quiz API route (Claude, validated JSON; text/markdown first, PDF later)
-7. Quiz UI wired to rewards, with anti-abuse limits
+1. Skeleton and design tokens (done)
+2. Projects and timer (done)
+3. Shard economy (done)
+4. Quiz spike: generate and grade quizzes from pasted text, with a throwaway lab page
+5. Gacha core: item table, weighted pull, inventory, collection grid
+6. Pull screen animation
+7. Quiz UI wired to rewards and sessions, with anti-abuse limits (minimum session length, one quiz per session, daily shard cap)
 8. Auth, deploy, real art, polish
 
 **Current milestone: 4**

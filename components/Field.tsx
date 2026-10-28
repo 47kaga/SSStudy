@@ -1,5 +1,5 @@
 import { useId } from "react";
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { Notice } from "@/components/Notice";
 
 const control =
@@ -51,6 +51,21 @@ export function SelectField({ label, error, children, ...select }: Shared & Sele
       >
         {children}
       </select>
+    </FieldFrame>
+  );
+}
+
+export function TextAreaField({ label, error, ...textarea }: Shared & TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const id = useId();
+  return (
+    <FieldFrame label={label} error={error} id={id}>
+      <textarea
+        id={id}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        className={control}
+        {...textarea}
+      />
     </FieldFrame>
   );
 }
