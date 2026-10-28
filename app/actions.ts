@@ -3,12 +3,14 @@
 import { refresh } from "next/cache";
 import { validateProjectTitle } from "@/lib/project-title";
 import { archiveProject, createProject } from "@/lib/projects";
+import { summarizeStoppedSession, type StopSummary } from "@/lib/rewards";
 import { shiftRunningSessionStart, startSession, stopRunningSession } from "@/lib/sessions";
 import { gachaData } from "@/data/gacha";
 import { pullDisplay, type PullDisplay } from "@/lib/gacha";
 import { grantDevShards, performPull } from "@/lib/shards";
 
 export type FormState = { error: string | null; value?: string };
+export type StopState = { stopped: StopSummary | null };
 export type StartState = { error: string | null; code?: "already-running" };
 /** What the page may know about a pull: the display fields the server chose for the item it picked. */
 export type PullState = { error: string | null; result?: PullDisplay };
@@ -52,9 +54,13 @@ export async function devAddMinutesAction(minutes: number): Promise<void> {
   refresh();
 }
 
-export async function stopTimerAction(): Promise<void> {
-  await stopRunningSession();
+// Returns what the stop dialog needs, all worked out on the server from the stored session and the ledger.
+// The client sends nothing. It lives in state held by TimerPanel because the running timer unmounts on refresh.
+export async function stopTimerAction(): Promise<StopState> {
+  const stopped = await stopRunningSession();
   refresh();
+  if (!stopped) return { stopped: null };
+  return { stopped: await summarizeStoppedSession(stopped) };
 }
 
 // The client sends nothing: the server picks the item and the cost, and decides if the pull is allowed.

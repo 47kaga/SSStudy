@@ -6,6 +6,7 @@ import { Button } from "@/components/Button";
 import { TextAreaField } from "@/components/Field";
 import { Notice } from "@/components/Notice";
 import { Panel } from "@/components/Panel";
+import { Row } from "@/components/Row";
 import { economy } from "@/data/economy";
 import type { AwardBreakdown, TimeLimit } from "@/lib/economy";
 import type { GradeResult, PublicQuestion } from "@/lib/quiz/types";
@@ -62,17 +63,6 @@ async function postJson(url: string, body: unknown): Promise<{ ok: boolean; data
 
 function errorText(data: Record<string, unknown>): string {
   return typeof data.error === "string" ? data.error : "Something went wrong.";
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="contents">
-      <div className="border-b-hairline border-r-hairline border-ink px-2 py-2 text-label uppercase md:px-4">{label}</div>
-      <div className="border-b-hairline border-r-hairline border-ink px-2 py-2 text-right tabular-nums md:px-4">
-        {value}
-      </div>
-    </div>
-  );
 }
 
 type ResultRows = {
@@ -228,7 +218,7 @@ export function SessionQuiz({ sessionId, minChars, maxChars, start }: Props) {
           </div>
           <div>
             <Button variant="primary" onClick={generate} disabled={busy || length === 0}>
-              {busy ? "Working" : "Generate"}
+              {busy ? "Generating, up to 30 seconds" : "Generate"}
             </Button>
           </div>
           {error ? <Notice>{error}</Notice> : null}

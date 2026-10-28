@@ -20,9 +20,34 @@ export const spacing = {
   32: "128px",
 } as const;
 
+const systemFonts = ["system-ui", "-apple-system", '"Segoe UI"', "Roboto", "sans-serif"];
+
 export const fontFamily = {
-  sans: ["system-ui", "-apple-system", '"Segoe UI"', "Roboto", "sans-serif"],
+  sans: systemFonts,
+  // Item names and rarity words. The same system stack today, so no font file is involved.
+  // This is the one place to point item text at a chosen font later.
+  item: systemFonts,
 };
+
+// Item-text colors by rarity tier, the vanilla Terraria ladder (tiers 0 to 11). These are starting
+// values to tune. They are not UI colors: they apply only to item names, rarity words and pips, and each
+// is a flat hex. The custom tiers 12 to 15 are left out on purpose (gradients are banned).
+export const rarityPalette = {
+  0: "#FFFFFF",
+  1: "#9696FF",
+  2: "#96FF96",
+  3: "#FFC896",
+  4: "#FF9696",
+  5: "#FF96FF",
+  6: "#D2A0FF",
+  7: "#96FF0A",
+  8: "#FFFF0A",
+  9: "#05C8FF",
+  10: "#FF2864",
+  11: "#B428FF",
+} as const satisfies Record<number, string>;
+
+export type RarityTier = keyof typeof rarityPalette;
 
 type TextStyle = [size: string, style: { lineHeight: string; letterSpacing?: string; fontWeight?: string }];
 
@@ -41,6 +66,22 @@ export const borderWidth = {
 
 export const maxWidth = {
   screen: "72rem",
+  modal: "28rem",
 } as const;
 
-export const tokens = { colors, spacing, fontFamily, fontSize, borderWidth, maxWidth } as const;
+// The one blur in the design: behind a modal dialog, so the page underneath reads as out of focus.
+// Used only by components/Modal.tsx (theme/guardrails.test.ts enforces that). No other blur, glow or shadow.
+export const backdropBlur = {
+  modal: "6px",
+} as const;
+
+export const tokens = {
+  colors,
+  rarityPalette,
+  spacing,
+  fontFamily,
+  fontSize,
+  borderWidth,
+  maxWidth,
+  backdropBlur,
+} as const;

@@ -4,9 +4,10 @@ import { gacha, gachaData } from "@/data/gacha";
 import { db } from "@/lib/db";
 import { rollPull, validateGachaData, type GachaItem } from "@/lib/gacha";
 import type { Prisma } from "@/generated/prisma/client";
+import { rarityPalette } from "@/theme/tokens";
 
 // Fail at startup, not on someone's pull, if the game data is broken.
-validateGachaData(gachaData);
+validateGachaData(gachaData, rarityPalette);
 
 export type PullResult =
   | { ok: true; item: GachaItem; isNew: boolean; balance: number }

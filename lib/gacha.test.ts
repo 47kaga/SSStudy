@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { gachaData } from "@/data/gacha";
+import { rarityPalette } from "@/theme/tokens";
 import { pickWeighted, pullDisplay, rollPull, validateGachaData, type GachaData, type RandomInt } from "./gacha";
 
 /** Small deterministic PRNG, so the distribution test is repeatable and cannot be flaky. */
@@ -146,7 +147,7 @@ describe("rollPull: distribution", () => {
 
 describe("the real data", () => {
   it("passes validation", () => {
-    expect(() => validateGachaData(gachaData)).not.toThrow();
+    expect(() => validateGachaData(gachaData, rarityPalette)).not.toThrow();
   });
 
   it("matches the design: 12 items in the planned rarity counts", () => {
@@ -158,15 +159,15 @@ describe("the real data", () => {
 });
 
 describe("rarity display data", () => {
-  it("uses the planned border weight and pips per rarity, with only Ultra Rare in the accent color", () => {
+  it("uses the planned border weight, pips and text tier per rarity, with only Ultra Rare on the ink panel", () => {
     const shown = Object.fromEntries(
-      gachaData.rarities.map((rarity) => [rarity.id, [rarity.border, rarity.pips, rarity.accent]]),
+      gachaData.rarities.map((rarity) => [rarity.id, [rarity.border, rarity.pips, rarity.tier, rarity.darkPanel]]),
     );
     expect(shown).toEqual({
-      common: ["hairline", 1, false],
-      rare: ["medium", 2, false],
-      "super-rare": ["heavy", 3, false],
-      "ultra-rare": ["heavy", 4, true],
+      common: ["hairline", 1, 0, false],
+      rare: ["medium", 2, 2, false],
+      "super-rare": ["heavy", 3, 5, false],
+      "ultra-rare": ["heavy", 4, 11, true],
     });
   });
 });
@@ -181,7 +182,8 @@ describe("pullDisplay", () => {
       mark: "UR",
       pips: 4,
       border: "heavy",
-      accent: true,
+      tier: 11,
+      darkPanel: true,
       isNew: true,
     });
   });
@@ -192,10 +194,11 @@ describe("pullDisplay", () => {
 });
 
 describe("validateGachaData", () => {
+  const palette = { 0: "#FFFFFF", 3: "#FFC896" };
   const valid: GachaData = {
     rarities: [
-      { id: "low", label: "Low", mark: "L", weight: 80, border: "hairline", pips: 1, accent: false },
-      { id: "high", label: "High", mark: "H", weight: 20, border: "heavy", pips: 4, accent: true },
+      { id: "low", label: "Low", mark: "L", weight: 80, border: "hairline", pips: 1, tier: 0, darkPanel: false },
+      { id: "high", label: "High", mark: "H", weight: 20, border: "heavy", pips: 4, tier: 3, darkPanel: true },
     ],
     items: [
       { key: "a", name: "A", rarity: "low" },
@@ -204,45 +207,58 @@ describe("validateGachaData", () => {
   };
 
   it("accepts valid data", () => {
-    expect(() => validateGachaData(valid)).not.toThrow();
+    expect(() => validateGachaData(valid, palette)).not.toThrow();
   });
 
   it("rejects a duplicate item key", () => {
     const data = { ...valid, items: [...valid.items, { key: "a", name: "Again", rarity: "high" }] };
-    expect(() => validateGachaData(data)).toThrow(/Duplicate item key "a"/);
+    expect(() => validateGachaData(data, palette)).toThrow(/Duplicate item key "a"/);
   });
 
   it("rejects a rarity with no items", () => {
     const data = { ...valid, items: [valid.items[0]] };
-    expect(() => validateGachaData(data)).toThrow(/"high" has no items/);
+    expect(() => validateGachaData(data, palette)).toThrow(/"high" has no items/);
   });
 
   it("rejects a non-integer, zero or negative weight", () => {
     for (const weight of [20.5, 0, -20]) {
       const data = { ...valid, rarities: [valid.rarities[0], { ...valid.rarities[1], weight }] };
-      expect(() => validateGachaData(data)).toThrow(/weight/);
+      expect(() => validateGachaData(data, palette)).toThrow(/weight/);
     }
   });
 
   it("rejects weights that do not sum to 100", () => {
     const data = { ...valid, rarities: [valid.rarities[0], { ...valid.rarities[1], weight: 21 }] };
-    expect(() => validateGachaData(data)).toThrow(/sum to 101/);
+    expect(() => validateGachaData(data, palette)).toThrow(/sum to 101/);
   });
 
   it("rejects an item with an unknown rarity", () => {
     const data = { ...valid, items: [...valid.items, { key: "c", name: "C", rarity: "mythic" }] };
-    expect(() => validateGachaData(data)).toThrow(/unknown rarity "mythic"/);
+    expect(() => validateGachaData(data, palette)).toThrow(/unknown rarity "mythic"/);
   });
 
   it("rejects pips outside 1 to 4", () => {
     for (const pips of [0, 5, 2.5, -1]) {
       const data = { ...valid, rarities: [valid.rarities[0], { ...valid.rarities[1], pips }] };
-      expect(() => validateGachaData(data)).toThrow(/pips/);
+      expect(() => validateGachaData(data, palette)).toThrow(/pips/);
     }
   });
 
   it("rejects a duplicate rarity id", () => {
     const data = { ...valid, rarities: [valid.rarities[0], { ...valid.rarities[0], weight: 20 }] };
-    expect(() => validateGachaData(data)).toThrow(/Duplicate rarity id/);
+    expect(() => validateGachaData(data, palette)).toThrow(/Duplicate rarity id/);
+  });
+
+  it("rejects a rarity whose tier has no color in the palette", () => {
+    for (const tier of [1, 12, -1, 2.5]) {
+      const data = { ...valid, rarities: [valid.rarities[0], { ...valid.rarities[1], tier }] };
+      expect(() => validateGachaData(data, palette)).toThrow(/tier .* not in the rarity palette/);
+    }
+  });
+
+  it("checks every real rarity against the real palette", () => {
+    const missing = { ...rarityPalette } as Record<number, string>;
+    delete missing[11];
+    expect(() => validateGachaData(gachaData, missing)).toThrow(/"ultra-rare" has tier 11/);
   });
 });

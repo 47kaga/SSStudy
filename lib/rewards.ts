@@ -1,7 +1,7 @@
 import "server-only";
 import { economy } from "@/data/economy";
 import { db } from "@/lib/db";
-import { calculateAward, sessionEligibility, type AwardBreakdown } from "@/lib/economy";
+import { bestCaseAward, calculateAward, sessionEligibility, type AwardBreakdown } from "@/lib/economy";
 import { sumLedger } from "@/lib/shards";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -73,4 +73,28 @@ export async function awardSessionQuiz(
     });
   }
   return { award, balance: await sumLedger(tx) };
+}
+
+export type StopSummary = {
+  sessionId: number;
+  durationSeconds: number;
+  /** The most this session could still pay: a perfect score, enough material, within the daily cap. */
+  maxShards: number;
+  /** Characters of material needed for the whole counted session to count. */
+  materialCharsNeeded: number;
+};
+
+/** What the stop dialog shows, worked out from the stored duration and the ledger. Nothing comes from the client. */
+export async function summarizeStoppedSession(stopped: {
+  sessionId: number;
+  durationSeconds: number;
+}): Promise<StopSummary> {
+  const earnedInWindow = await sumEarnedInWindow(db, Date.now());
+  const best = bestCaseAward({ durationSeconds: stopped.durationSeconds, earnedInWindow });
+  return {
+    sessionId: stopped.sessionId,
+    durationSeconds: stopped.durationSeconds,
+    maxShards: best.maxShards,
+    materialCharsNeeded: best.materialCharsNeeded,
+  };
 }

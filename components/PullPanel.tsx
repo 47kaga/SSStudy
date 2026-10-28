@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { devGrantAction, pullAction, type PullState } from "@/app/actions";
 import { Button } from "@/components/Button";
+import { ItemName } from "@/components/ItemName";
 import { Notice } from "@/components/Notice";
 import { Panel } from "@/components/Panel";
 import { Pips } from "@/components/Pips";
@@ -25,7 +26,7 @@ type PullPanelProps = {
 export function PullPanel({ balance, pullCost, devTools, devGrantShards }: PullPanelProps) {
   const [state, pull, pending] = useActionState(pullAction, initialState);
   const won = state.result;
-  const accent = won?.accent ?? false;
+  const darkPanel = won?.darkPanel ?? false;
   const affordable = Math.floor(balance / pullCost);
 
   return (
@@ -62,7 +63,7 @@ export function PullPanel({ balance, pullCost, devTools, devGrantShards }: PullP
       <div className="border-l-hairline border-t-hairline border-ink">
         <section
           className={`flex flex-col gap-4 border-b-hairline border-r-hairline border-ink p-6 md:p-8 ${
-            accent ? "bg-accent text-background" : ""
+            darkPanel ? "bg-ink text-background" : ""
           }`}
         >
           <h2 className="text-label uppercase">Last pull</h2>
@@ -73,15 +74,19 @@ export function PullPanel({ balance, pullCost, devTools, devGrantShards }: PullP
                 aria-hidden="true"
               />
               <div className="flex min-w-0 flex-col gap-2">
-                <p className="break-words text-title">{won.name}</p>
+                <p className="break-words text-title">
+                  <ItemName tier={won.tier}>{won.name}</ItemName>
+                </p>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Pips count={won.pips} tone={accent ? "background" : "ink"} />
-                  <span className="text-label uppercase">{won.rarityLabel}</span>
+                  <Pips count={won.pips} tier={won.tier} />
+                  <ItemName tier={won.tier} className="text-label uppercase">
+                    {won.rarityLabel}
+                  </ItemName>
                 </div>
                 {won.isNew ? (
                   <p
                     className={`w-fit border-hairline px-2 py-1 text-label uppercase ${
-                      accent ? "border-background" : "border-ink"
+                      darkPanel ? "border-background" : "border-ink"
                     }`}
                   >
                     New

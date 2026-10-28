@@ -4,6 +4,10 @@ import type { QuizQuestion } from "./types";
 
 export type BalanceLimits = {
   maxOptionLengthRatio: number;
+  /** Options this close in absolute length (characters) pass even when the ratio is high. */
+  maxOptionCharGap: number;
+  /** The same for word counts. */
+  maxOptionWordGap: number;
   shortOptionExemptChars: number;
   maxLengthTellQuestions: number;
 };
@@ -29,19 +33,57 @@ function uniqueShortestIndex(options: string[]): number | null {
 }
 
 /**
- * The per-question ratio rule: null when the question's options are close enough in length, otherwise
- * which measure failed. Skipped when the longest option is at most `shortOptionExemptChars` long.
+ * The per-question length rule: null when the question's options are close enough in length, otherwise
+ * which measure failed. Skipped when the longest option is at most `shortOptionExemptChars` long. A measure
+ * passes when longest / shortest is within `maxOptionLengthRatio`, or when the absolute difference is within
+ * the gap limit: short terms differ a lot by ratio but little in absolute size, and the tell limits (not
+ * this rule) are what stop the answer being guessed from length.
  */
 export function questionRatioProblem(question: QuizQuestion, limits: BalanceLimits): "characters" | "words" | null {
   const chars = question.options.map((option) => option.length);
-  if (Math.max(...chars) <= limits.shortOptionExemptChars) return null;
+  const longestChars = Math.max(...chars);
+  const shortestChars = Math.min(...chars);
+  if (longestChars <= limits.shortOptionExemptChars) return null;
 
-  if (Math.max(...chars) > limits.maxOptionLengthRatio * Math.min(...chars)) return "characters";
+  const charsClose =
+    longestChars <= limits.maxOptionLengthRatio * shortestChars || longestChars - shortestChars <= limits.maxOptionCharGap;
+  if (!charsClose) return "characters";
+
   const words = question.options.map(wordCount);
-  if (Math.max(...words) > limits.maxOptionLengthRatio * Math.min(...words)) return "words";
+  const longestWords = Math.max(...words);
+  const shortestWords = Math.min(...words);
+  const wordsClose =
+    longestWords <= limits.maxOptionLengthRatio * shortestWords || longestWords - shortestWords <= limits.maxOptionWordGap;
+  if (!wordsClose) return "words";
   return null;
 }
 
+export type RejectionCounts = {
+  total: number;
+  failedCharacters: number;
+  failedWords: number;
+  usable: number;
+};
+
+/**
+ * Counts how many candidates fail the per-question rule and why. Each candidate is counted once, under the
+ * first measure it fails (characters before words). Numbers only: no question or option text.
+ */
+export function summarizeRejections(candidates: QuizQuestion[], limits: BalanceLimits): RejectionCounts {
+  const counts: RejectionCounts = { total: candidates.length, failedCharacters: 0, failedWords: 0, usable: 0 };
+  for (const candidate of candidates) {
+    const problem = questionRatioProblem(candidate, limits);
+    if (problem === "characters") counts.failedCharacters += 1;
+    else if (problem === "words") counts.failedWords += 1;
+    else counts.usable += 1;
+  }
+  return counts;
+}
+
+/** For log lines, for example "8 candidates: 3 failed on characters, 2 on words, 3 usable". */
+export function describeRejections(counts: RejectionCounts): string {
+  return `${counts.total} candidates: ${counts.failedCharacters} failed on characters, ${counts.failedWords} on words, ${counts.usable} usable`;
+}
 /**
  * Fails a quiz whose answers can be guessed from option length: a question whose options differ too much
  * in length or word count, or a correct answer that is too often the unique longest or unique shortest.

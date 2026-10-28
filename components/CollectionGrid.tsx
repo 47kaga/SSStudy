@@ -1,3 +1,4 @@
+import { ItemName } from "@/components/ItemName";
 import { Pips } from "@/components/Pips";
 import { gachaData } from "@/data/gacha";
 import type { OwnedItem } from "@/lib/inventory";
@@ -41,13 +42,15 @@ export function CollectionGrid({ owned }: { owned: OwnedItem[] }) {
           >
             <div className="flex items-start justify-between">
               <span className="text-label tabular-nums">{itemNumber(index)}</span>
-              <Pips count={rarity.pips} tone={rarity.accent ? "accent" : "ink"} />
+              <Pips count={rarity.pips} tier={rarity.tier} />
             </div>
             <div className="flex flex-1 items-center justify-center">
               <div className={`h-12 w-12 border-ink bg-background md:h-16 md:w-16 ${BORDER[rarity.border]}`} />
             </div>
             <div className="flex items-end justify-between gap-1">
-              <p className="min-w-0 wrap-anywhere text-caption">{item.name}</p>
+              <p className="min-w-0 wrap-anywhere text-caption">
+                <ItemName tier={rarity.tier}>{item.name}</ItemName>
+              </p>
               {count > 1 ? <span className="shrink-0 text-caption tabular-nums">x{count}</span> : null}
             </div>
           </div>

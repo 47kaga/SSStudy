@@ -14,7 +14,7 @@ Core loop: Study (timer) -> Quiz (score) -> Reward (shards -> pulls).
 - Next.js (App Router) + TypeScript (strict mode)
 - Tailwind CSS, with the theme restricted to the design tokens below
 - Zustand for client state (timer, inventory UI) only where React state is not enough
-- Prisma + SQLite for persistence, introduced at Milestone 2. Single local user until auth arrives in Milestone 10.
+- Prisma + SQLite for persistence, introduced at Milestone 2. Single local user until auth arrives in Milestone 11.
 - Anthropic Claude API, called only from Next.js route handlers (server side). The API key lives in `.env.local` and must never reach the client bundle.
 - Vitest for tests
 - Layout is desktop-first but must work at phone width. A PWA or app wrapper can come later; do not build for it now.
@@ -41,10 +41,11 @@ Core loop: Study (timer) -> Quiz (score) -> Reward (shards -> pulls).
 Interpretation:
 
 - The 3-color limit applies to the UI chrome (backgrounds, text, lines, buttons). Collectible artwork is the only exception and may use its own palette.
-- Rarity is shown with border weight (hairline, medium, heavy) and pips (small flat squares in the corner), not with extra UI colors. Ultra Rare may use the accent color.
+- Rarity is shown with border weight (hairline, medium, heavy), pips (small flat squares in the corner) and the color of the item text. The item-text colors come from `rarityPalette` in `theme/tokens.ts` (Terraria's tiers 0 to 11, flat hex, starting values to tune) and apply only to item names, rarity words and pips. They are not UI colors, like collectible artwork. Item text is bold with a dark outline (`.item-text` in `app/globals.css`), drawn by `components/ItemName.tsx`; pips use the same color with a hairline ink outline. Each rarity in `data/gacha.ts` has a `tier`, and `validateGachaData` throws if a tier is missing from the palette. Do not add custom (gradient) tiers 12 to 15.
+- Item text uses `fontFamily.item`, which is the system stack today. It is an exception to "system fonts only" only if and when the user chooses a font. Do not add a font file or web font on your own.
 - Tailwind's default palette is disabled. The theme defines only the 3 token colors, so off-palette classes simply do not exist.
 - All colors, spacing, and type sizes come from the theme. No inline hex values, arbitrary Tailwind values (`[#fff]`, `[13px]`) or magic numbers in components.
-- No box-shadow, blur, glow or gradient effects. Animations are flat and simple (scale, fade, translate).
+- No box-shadow, glow or gradient effects. Blur is allowed only on the modal backdrop (`components/Modal.tsx`, the `backdropBlur` token). No other blur, glow or shadow; the guardrails test fails if a blur class appears anywhere else. Animations are flat and simple (scale, fade, translate), and the modal has none.
 
 ## Pixel art rules
 
@@ -73,7 +74,8 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 ## Quiz
 
 - Never send a duration, score or amount from the client.
-- Quizzes must not be beatable by option length. The model is asked for `candidateQuestions` (8) questions, ordered best first, and `selectBalanced` keeps the `questionCount` (5) most balanced. Kept questions obey `maxOptionLengthRatio` (2.0, by characters and by words) and `maxLengthTellQuestions` (1, for unique-longest-correct and for unique-shortest-correct). Do not weaken these without asking.
+- Quizzes must not be beatable by option length. The model is asked for `candidateQuestions` (10) questions, ordered best first, and `selectBalanced` keeps the `questionCount` (5) most balanced. A kept question passes the length rule by characters and by words when the longest option is within `maxOptionLengthRatio` (2.0) of the shortest, or within `maxOptionCharGap` (30) characters or `maxOptionWordGap` (3) words of it (options up to `shortOptionExemptChars` are exempt). At most `maxLengthTellQuestions` (1) kept question may have a unique-longest correct answer, and at most 1 a unique-shortest one. A rejected attempt is retried up to `maxAttempts` (3) times, with trusted numbers-only feedback. Do not weaken these without asking.
+- Stopping a session of `quizPromptMinSeconds` (1800) or more opens the "Test yourself now?" dialog. The time, the most shards and the material needed are all computed on the server (`stopTimerAction`); the client sends nothing.
 
 ## Milestones
 
@@ -82,10 +84,18 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 3. Shard economy (done)
 4. Quiz spike (done)
 5. Gacha core (done)
-6. Close the loop: a finished session unlocks one quiz, the quiz score awards shards, with anti-abuse limits and dev testing tools (this milestone)
+6. Close the loop: a finished session unlocks one quiz, the quiz score awards shards, with anti-abuse limits and dev testing tools (done)
+6b. Quality-of-life before the room: quiz reliability (length-gap rules, 10 candidates, 3 attempts), the "Test yourself now?" popup, and Terraria-style item text (done)
 7. Room scene v1: pixel sprite component, fixed tile room, starter desk, character with idle and studying states driven by the running timer, timer HUD
-8. Room items and equipping
-9. Case-opening pull scene with the character in a corner
-10. Auth, deploy, real art, polish
 
 **Current milestone: 7**
+
+## Planned
+
+Not started. Do not build any of this before its milestone.
+
+- 7. Room scene v1: pixel sprite component, 16px tiles, a fixed tile room, 2 character states (idle, studying) driven by the running timer.
+- 8. Materials: saved notes and uploaded files per project, text extracted and stored per page, quizzes built from a chosen page range, images transcribed once, cost controls.
+- 9. Room items and equipping, plus an item detail dialog (type, count, rarity, pull date from ledger rows, description) that reuses `Modal`.
+- 10. Case-opening pull scene.
+- 11. Auth, deploy, real art, polish.

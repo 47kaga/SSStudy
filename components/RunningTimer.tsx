@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useState, useSyncExternalStore } from "react";
-import { devAddMinutesAction, stopTimerAction } from "@/app/actions";
+import { useState, useSyncExternalStore } from "react";
+import { devAddMinutesAction } from "@/app/actions";
 import { Button } from "@/components/Button";
 import { devTimerMinutes } from "@/data/dev";
 import { elapsedSeconds, formatDuration } from "@/lib/time";
@@ -14,6 +14,9 @@ type RunningTimerProps = {
   serverNowMs: number;
   /** Whether the development-only add-minutes buttons are offered. Decided on the server. */
   devTools: boolean;
+  /** The stop action and its pending flag are owned by TimerPanel, which stays mounted after the stop. */
+  stopAction: () => void;
+  stopping: boolean;
 };
 
 const TICK_MS = 250;
@@ -39,10 +42,9 @@ function getServerNow(): null {
   return null;
 }
 
-export function RunningTimer({ projectTitle, startedAtMs, serverNowMs, devTools }: RunningTimerProps) {
+export function RunningTimer({ projectTitle, startedAtMs, serverNowMs, devTools, stopAction, stopping }: RunningTimerProps) {
   const [skewMs] = useState(() => serverNowMs - Date.now());
   const clientNow = useSyncExternalStore(subscribe, getClientNow, getServerNow);
-  const [, stopAction, stopping] = useActionState(stopTimerAction, undefined);
 
   const display = clientNow === null ? PLACEHOLDER : formatDuration(elapsedSeconds(startedAtMs, clientNow + skewMs));
 

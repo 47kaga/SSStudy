@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { economy, type AwardConfig, type EconomyConfig } from "@/data/economy";
-import { calculateAward, calculateShards, sessionEligibility, type AwardInput, type ShardInput } from "./economy";
+import { bestCaseAward, calculateAward, calculateShards, materialCharsNeeded, sessionEligibility, type AwardInput, type ShardInput } from "./economy";
 
 const MINUTE = 60;
 const HOUR = 3600;
@@ -384,5 +384,93 @@ describe("calculateAward: invalid input", () => {
     expect(run({ dailyShardCap: 1.5 })).toThrow(RangeError);
     expect(run({ dailyWindowSeconds: 0 })).toThrow(RangeError);
     expect(run({ secondsPerShardUnit: 0 })).toThrow(RangeError);
+  });
+});
+
+// ---- Milestone 6b: the stop popup numbers ----
+
+describe("materialCharsNeeded", () => {
+  it("is the characters whose supported time covers the seconds", () => {
+    expect(materialCharsNeeded(1800)).toBe(900); // 30 minutes
+    expect(materialCharsNeeded(3600)).toBe(1800); // 60 minutes
+    expect(materialCharsNeeded(600)).toBe(300);
+    expect(materialCharsNeeded(0)).toBe(0);
+  });
+
+  it("rounds up, never down, so the whole time is covered", () => {
+    expect(materialCharsNeeded(1)).toBe(1);
+    expect(materialCharsNeeded(1799)).toBe(900);
+    expect(materialCharsNeeded(1801)).toBe(901);
+    expect(materialCharsNeeded(1801) * economy.secondsPerSourceChar).toBeGreaterThanOrEqual(1801);
+    expect((materialCharsNeeded(1801) - 1) * economy.secondsPerSourceChar).toBeLessThan(1801);
+  });
+
+  it("uses the given characters-per-second setting", () => {
+    expect(materialCharsNeeded(10, { secondsPerSourceChar: 3 })).toBe(4);
+    expect(materialCharsNeeded(9, { secondsPerSourceChar: 3 })).toBe(3);
+  });
+
+  it("rejects bad input", () => {
+    expect(() => materialCharsNeeded(-1)).toThrow(RangeError);
+    expect(() => materialCharsNeeded(1.5)).toThrow(RangeError);
+    expect(() => materialCharsNeeded(Number.NaN)).toThrow(RangeError);
+    expect(() => materialCharsNeeded(60, { secondsPerSourceChar: 0 })).toThrow(RangeError);
+    expect(() => materialCharsNeeded(60, { secondsPerSourceChar: 1.5 })).toThrow(RangeError);
+  });
+});
+
+describe("bestCaseAward", () => {
+  const best = (durationSeconds: number, earnedInWindow = 0, config?: AwardConfig) =>
+    bestCaseAward({ durationSeconds, earnedInWindow }, config);
+
+  it("30 minutes: 3 shards and 900 characters", () => {
+    expect(best(30 * MINUTE)).toEqual({ countedSeconds: 1800, maxShards: 3, materialCharsNeeded: 900 });
+  });
+
+  it("60 minutes: 6 shards and 1800 characters", () => {
+    expect(best(HOUR)).toEqual({ countedSeconds: 3600, maxShards: 6, materialCharsNeeded: 1800 });
+  });
+
+  it("applies the 4-hour session cap: a 5-hour session counts and needs the same as 4 hours", () => {
+    const four = best(4 * HOUR);
+    expect(four).toEqual({ countedSeconds: 14400, maxShards: 24, materialCharsNeeded: 7200 });
+    expect(best(5 * HOUR)).toEqual(four);
+  });
+
+  it("trims the maximum to what the daily cap leaves", () => {
+    expect(best(HOUR, economy.dailyShardCap - 4).maxShards).toBe(4); // raw 6, 4 left
+    expect(best(HOUR, economy.dailyShardCap - 6).maxShards).toBe(6); // exactly fits
+  });
+
+  it("is 0 when the daily cap is used up or exceeded, but still reports the material needed", () => {
+    expect(best(HOUR, economy.dailyShardCap)).toEqual({ countedSeconds: 3600, maxShards: 0, materialCharsNeeded: 1800 });
+    expect(best(HOUR, economy.dailyShardCap + 10).maxShards).toBe(0);
+  });
+
+  it("agrees with a real perfect-score award for that much material", () => {
+    for (const duration of [600, 1799, 1800, 4000, 14400, 20000]) {
+      const result = best(duration, 7);
+      const real = calculateAward({
+        durationSeconds: duration,
+        sourceChars: result.materialCharsNeeded,
+        correctAnswers: 5,
+        totalQuestions: 5,
+        earnedInWindow: 7,
+      });
+      expect(result.maxShards).toBe(real.awarded);
+      expect(result.countedSeconds).toBe(real.countedSeconds);
+    }
+  });
+
+  it("uses the given config", () => {
+    const config: AwardConfig = { ...economy, dailyShardCap: 2 };
+    expect(best(HOUR, 0, config).maxShards).toBe(2);
+  });
+
+  it("rejects bad input", () => {
+    expect(() => best(-1)).toThrow(RangeError);
+    expect(() => best(1.5)).toThrow(RangeError);
+    expect(() => best(HOUR, -1)).toThrow(RangeError);
+    expect(() => best(HOUR, Number.NaN)).toThrow(RangeError);
   });
 });

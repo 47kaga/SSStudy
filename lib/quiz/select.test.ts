@@ -4,7 +4,14 @@ import { selectBalanced } from "./select";
 import type { QuizQuestion } from "./types";
 
 // Fixed here, not read from data/quiz.ts, so these tests describe the rules and not today's config.
-const limits = { maxOptionLengthRatio: 2, shortOptionExemptChars: 20, maxLengthTellQuestions: 1, questionCount: 3 };
+const limits = {
+  maxOptionLengthRatio: 2,
+  maxOptionCharGap: 0,
+  maxOptionWordGap: 0,
+  shortOptionExemptChars: 20,
+  maxLengthTellQuestions: 1,
+  questionCount: 3,
+};
 
 /** One-word options of exact character lengths. Word counts are all 1. */
 function question(id: string, lengths: number[], correctIndex: number): QuizQuestion {
@@ -112,5 +119,19 @@ describe("selectBalanced", () => {
 
     expect(JSON.stringify(pool)).toBe(snapshot);
     expect(pool.map((q) => q.question)).toEqual(order);
+  });
+
+  it("keeps candidates that pass only by the absolute gap, and drops them when the gap rule is off", () => {
+    // 22 vs 52: ratio 2.36, gap 30.
+    const shortTerms = (id: string) => question(id, [22, 28, 40, 52], 1);
+    const pool = [shortTerms("a"), shortTerms("b"), shortTerms("c")];
+    expect(selectBalanced(pool, limits)).toBeNull();
+    expect(ids(selectBalanced(pool, { ...limits, maxOptionCharGap: 30 }))).toEqual(["a", "b", "c"]);
+  });
+
+  it("searches a 10-candidate pool for 5 questions", () => {
+    const five = { ...limits, questionCount: 5 };
+    const pool = Array.from({ length: 10 }, (_, n) => (n % 2 === 0 ? even(`e${n}`) : rough(`r${n}`)));
+    expect(ids(selectBalanced(pool, five))).toEqual(["e0", "e2", "e4", "e6", "e8"]);
   });
 });

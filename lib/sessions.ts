@@ -59,16 +59,21 @@ export async function startSession(projectId: number): Promise<StartResult> {
   return { ok: true };
 }
 
-// Harmless no-op when nothing is running. Duration is computed from the server clock.
-export async function stopRunningSession(): Promise<void> {
+export type StoppedSession = { sessionId: number; durationSeconds: number };
+
+// Harmless no-op (returns null) when nothing is running. Duration is computed from the server clock.
+export async function stopRunningSession(): Promise<StoppedSession | null> {
   const running = await db.studySession.findFirst({ where: { endedAt: null } });
-  if (!running) return;
+  if (!running) return null;
 
   const endedAt = new Date();
-  await db.studySession.updateMany({
+  const durationSeconds = elapsedSeconds(running.startedAt, endedAt);
+  const stopped = await db.studySession.updateMany({
     where: { id: running.id, endedAt: null },
-    data: { endedAt, durationSeconds: elapsedSeconds(running.startedAt, endedAt) },
+    data: { endedAt, durationSeconds },
   });
+  // Two stops racing: only the one that actually ended the session reports it.
+  return stopped.count === 1 ? { sessionId: running.id, durationSeconds } : null;
 }
 
 /**

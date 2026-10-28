@@ -6,6 +6,7 @@ import { checkSessionUnlock } from "@/lib/rewards";
 import { Prisma } from "@/generated/prisma/client";
 import { getAnthropic, MissingApiKeyError } from "./anthropic";
 import { runQuizAttempts, type CallModel } from "./attempts";
+import { describeRejections, type RejectionCounts } from "./balance";
 import { buildMaterialMessage } from "./prompt";
 import { toPublicQuiz } from "./public";
 import { shuffleOptions } from "./shuffle";
@@ -50,6 +51,11 @@ function secureRandom(): number {
 /** Keys and value types of invalid tool input, for the log. Never the values themselves. */
 function shapeNote(inputShape: string | undefined): string {
   return inputShape ? ` Tool input was { ${inputShape} }.` : "";
+}
+
+/** For an unbalanced rejection: how many candidates failed each measure. Numbers only, never text. */
+function countsNote(counts: RejectionCounts | undefined): string {
+  return counts ? ` (${describeRejections(counts)})` : "";
 }
 
 function failure(code: "model-failure"): GenerateResult {
@@ -136,8 +142,10 @@ export async function generateQuiz(sourceText: string, sessionId: number | null 
   let result;
   try {
     result = await runQuizAttempts(callModel, {
-      onRetry: ({ attempt, failure: kind, message, inputShape }) =>
-        console.error(`[quiz] Attempt ${attempt} rejected (${kind}): ${message}${shapeNote(inputShape)} Retrying.`),
+      onRetry: ({ attempt, failure: kind, message, inputShape, counts }) =>
+        console.error(
+          `[quiz] Attempt ${attempt} rejected (${kind}): ${message}${countsNote(counts)}${shapeNote(inputShape)} Retrying.`,
+        ),
     });
   } catch (error) {
     if (error instanceof ModelRequestError) return failure("model-failure");
@@ -150,7 +158,7 @@ export async function generateQuiz(sourceText: string, sessionId: number | null 
   }
   if (result.kind === "failed") {
     console.error(
-      `[quiz] Gave up after ${result.attempts} attempts (${result.failure}): ${result.message}${shapeNote(result.inputShape)}`,
+      `[quiz] Gave up after ${result.attempts} attempts (${result.failure}): ${result.message}${countsNote(result.counts)}${shapeNote(result.inputShape)}`,
     );
     return failure("model-failure");
   }

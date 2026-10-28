@@ -16,8 +16,10 @@ export type Rarity = {
   border: BorderWeight;
   /** Number of small squares shown for this rarity, 1 to 4. */
   pips: number;
-  /** Uses the accent color for its pips, label and hero panel. */
-  accent: boolean;
+  /** Item-text color tier: a key of the rarity palette in theme/tokens.ts. */
+  tier: number;
+  /** Shows the last-pull hero panel filled with ink (light text) instead of the plain page color. */
+  darkPanel: boolean;
 };
 
 /** Everything the page needs to show one pull. Built on the server from the rolled item. */
@@ -28,7 +30,8 @@ export type PullDisplay = {
   mark: string;
   pips: number;
   border: BorderWeight;
-  accent: boolean;
+  tier: number;
+  darkPanel: boolean;
   isNew: boolean;
 };
 
@@ -107,13 +110,17 @@ export function pullDisplay(data: GachaData, item: GachaItem, isNew: boolean): P
     mark: rarity.mark,
     pips: rarity.pips,
     border: rarity.border,
-    accent: rarity.accent,
+    tier: rarity.tier,
+    darkPanel: rarity.darkPanel,
     isNew,
   };
 }
 
-/** Throws a clear error if the data cannot be pulled from correctly. */
-export function validateGachaData(data: GachaData): void {
+/**
+ * Throws a clear error if the data cannot be pulled from correctly. The palette is passed in (it lives in
+ * theme/tokens.ts) so a rarity can never point at a tier that has no color.
+ */
+export function validateGachaData(data: GachaData, palette: Readonly<Record<number, string>>): void {
   const rarityIds = new Set<string>();
   let totalWeight = 0;
   for (const rarity of data.rarities) {
@@ -125,6 +132,9 @@ export function validateGachaData(data: GachaData): void {
     totalWeight += rarity.weight;
     if (!Number.isInteger(rarity.pips) || rarity.pips < MIN_PIPS || rarity.pips > MAX_PIPS) {
       throw new Error(`Rarity "${rarity.id}" has ${rarity.pips} pips; expected ${MIN_PIPS} to ${MAX_PIPS}.`);
+    }
+    if (!Object.hasOwn(palette, rarity.tier)) {
+      throw new Error(`Rarity "${rarity.id}" has tier ${rarity.tier}, which is not in the rarity palette.`);
     }
   }
   if (totalWeight !== TOTAL_RARITY_WEIGHT) {

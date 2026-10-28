@@ -7,6 +7,7 @@ import { ProjectForm } from "@/components/ProjectForm";
 import { RecentSessions } from "@/components/RecentSessions";
 import { Screen } from "@/components/Screen";
 import { TimerPanel } from "@/components/TimerPanel";
+import { quiz } from "@/data/quiz";
 import { listProjects } from "@/lib/projects";
 import { getRunningSession, listRecentSessions } from "@/lib/sessions";
 import { devToolsEnabled } from "@/lib/shards";
@@ -23,7 +24,9 @@ export default async function StudyPage() {
       <Divider weight="heavy" />
       <div className="grid grid-cols-1 border-l-hairline border-t-hairline border-ink md:grid-cols-2">
         <Panel title="Timer">
-          <TimerPanel projects={projects.map(({ id, title }) => ({ id, title }))} running={running} devTools={devToolsEnabled()} />
+          <TimerPanel projects={projects.map(({ id, title }) => ({ id, title }))} running={running} devTools={devToolsEnabled()}
+            quizPromptMinSeconds={quiz.quizPromptMinSeconds}
+          />
         </Panel>
         <Panel title="Projects">
           {projects.length > 0 ? (

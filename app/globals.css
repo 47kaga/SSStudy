@@ -1,2 +1,11 @@
 @import "tailwindcss";
 @config "../tailwind.config.ts";
+
+/* Item text (components/ItemName.tsx): flat rarity color, with a dark outline painted behind the fill so the
+   letters stay readable on both the light page and the ink panel. The text color itself is set per tier. */
+.item-text {
+  font-weight: bold;
+  -webkit-text-stroke-width: theme(borderWidth.heavy);
+  -webkit-text-stroke-color: theme(colors.ink);
+  paint-order: stroke fill;
+}

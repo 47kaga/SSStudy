@@ -142,3 +142,51 @@ export function calculateAward(input: AwardInput, config: AwardConfig = economy)
     awarded: Math.min(rawShards, dailyRemaining),
   };
 }
+
+/**
+ * How many characters of pasted material support `countedSeconds` of study: the smallest whole number of
+ * characters whose supported time (`secondsPerSourceChar` each) is at least that long.
+ */
+export function materialCharsNeeded(
+  countedSeconds: number,
+  config: Pick<RewardLimits, "secondsPerSourceChar"> = economy,
+): number {
+  requirePositiveOrZeroInteger("countedSeconds", countedSeconds);
+  requireInteger("secondsPerSourceChar", config.secondsPerSourceChar);
+  if (config.secondsPerSourceChar < 1) {
+    throw new RangeError(`secondsPerSourceChar must be at least 1, got ${config.secondsPerSourceChar}`);
+  }
+  // Exact ceiling division on whole numbers.
+  const remainder = countedSeconds % config.secondsPerSourceChar;
+  return (countedSeconds - remainder) / config.secondsPerSourceChar + (remainder === 0 ? 0 : 1);
+}
+
+export type BestCase = {
+  /** The most seconds of this session that can count: the session length, trimmed by the session cap. */
+  countedSeconds: number;
+  /** The most this session could pay: a perfect score, enough material, and what is left of the daily cap. */
+  maxShards: number;
+  /** Material needed for all of `countedSeconds` to count. */
+  materialCharsNeeded: number;
+};
+
+/** The best case for a finished session, from the same award rules as the real payout. */
+export function bestCaseAward(
+  input: { durationSeconds: number; earnedInWindow: number },
+  config: AwardConfig = economy,
+): BestCase {
+  requirePositiveOrZeroInteger("durationSeconds", input.durationSeconds);
+  const countedSeconds = Math.min(input.durationSeconds, config.maxCountedSecondsPerSession);
+  const chars = materialCharsNeeded(countedSeconds, config);
+  const award = calculateAward(
+    {
+      durationSeconds: input.durationSeconds,
+      sourceChars: chars,
+      correctAnswers: 1,
+      totalQuestions: 1,
+      earnedInWindow: input.earnedInWindow,
+    },
+    config,
+  );
+  return { countedSeconds: award.countedSeconds, maxShards: award.awarded, materialCharsNeeded: chars };
+}

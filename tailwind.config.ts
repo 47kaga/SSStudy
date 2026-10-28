@@ -1,8 +1,8 @@
 import type { Config } from "tailwindcss";
-import { borderWidth, colors, fontFamily, fontSize, maxWidth, spacing } from "./theme/tokens";
+import { backdropBlur, borderWidth, colors, fontFamily, fontSize, maxWidth, spacing } from "./theme/tokens";
 
 // `theme` (not `theme.extend`) replaces Tailwind's defaults, so only token values exist as classes.
-// Empty shadow/blur maps remove those utilities entirely.
+// Empty shadow/blur maps remove those utilities entirely. The only blur is the modal backdrop.
 const config: Config = {
   theme: {
     colors,
@@ -15,7 +15,7 @@ const config: Config = {
     boxShadow: {},
     dropShadow: {},
     blur: {},
-    backdropBlur: {},
+    backdropBlur,
   },
 };
 

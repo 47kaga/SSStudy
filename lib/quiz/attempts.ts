@@ -1,6 +1,7 @@
 // The generate-validate-select-retry loop. No React, Next, Prisma, SDK or server-only imports:
 // the model call is injected, so retries can be unit tested with fakes.
 import { quiz, quizRetryFeedback } from "@/data/quiz";
+import { summarizeRejections, type RejectionCounts } from "./balance";
 import { selectBalanced, type SelectLimits } from "./select";
 import { describeShape } from "./shape";
 import type { QuizQuestion } from "./types";
@@ -17,13 +18,19 @@ export type CallModel = (feedback?: string) => Promise<ModelCall>;
 export type FailureKind = "invalid" | "unbalanced";
 
 /** Why an attempt was rejected. `inputShape` (keys and value types, never values) is set for "invalid". */
-export type Rejection = { failure: FailureKind; message: string; inputShape?: string };
+export type Rejection = {
+  failure: FailureKind;
+  message: string;
+  inputShape?: string;
+  /** For "unbalanced": how many candidates failed each measure (numbers only). */
+  counts?: RejectionCounts;
+};
 
 export type AttemptOptions = {
   maxAttempts: number;
   validation: ValidationLimits;
   balance: SelectLimits;
-  feedback: { unbalanced: string; invalid: string };
+  feedback: { unbalanced: (counts: RejectionCounts) => string; invalid: string };
   /** Called just before a retry, with why the previous attempt was rejected. */
   onRetry?: (info: Rejection & { attempt: number }) => void;
 };
@@ -83,12 +90,13 @@ export async function runQuizAttempts(
       last = {
         failure: "unbalanced",
         message: `No ${config.balance.questionCount} of the ${output.questions.length} questions met the option-length limits.`,
+        counts: summarizeRejections(output.questions, config.balance),
       };
     }
 
     if (attempt < config.maxAttempts) {
       config.onRetry?.({ attempt, ...last });
-      feedback = config.feedback[last.failure];
+      feedback = last.counts ? config.feedback.unbalanced(last.counts) : config.feedback.invalid;
     }
   }
 

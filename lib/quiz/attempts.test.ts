@@ -24,7 +24,8 @@ const balancedInput = () => pool((n) => poolQuestion(n, LENGTHS, 1));
 // Correct answer is the unique longest in every question: no subset can pass the tell limit.
 const biasedInput = () => pool((n) => poolQuestion(n, LENGTHS, 3));
 // Every option set is too uneven for the ratio rule: nothing survives the filter.
-const unevenInput = () => pool((n) => poolQuestion(n, [20, 30, 50, 30], 1));
+// (Gap 40 and ratio 3, so neither the ratio nor the absolute-gap rule lets it through.)
+const unevenInput = () => pool((n) => poolQuestion(n, [20, 30, 60, 30], 1));
 // Wrong shape: a string where the questions array belongs.
 const invalidInput = () => ({ status: "ok", questions: "not an array", secretNote: "do not log this" });
 
@@ -54,12 +55,12 @@ describe("runQuizAttempts", () => {
   });
 
   it("drops uneven candidates and keeps the balanced ones", async () => {
-    const mixed = pool((n) => (n < 3 ? poolQuestion(n, [20, 30, 50, 30], 1) : poolQuestion(n, LENGTHS, 1)));
+    const mixed = pool((n) => (n < quiz.candidateQuestions - quiz.questionCount ? poolQuestion(n, [20, 30, 60, 30], 1) : poolQuestion(n, LENGTHS, 1)));
     const result = await runQuizAttempts(fakeModel(call(mixed)).callModel);
 
     expect(result.kind).toBe("quiz");
     if (result.kind === "quiz") {
-      expect(result.questions.map((q) => q.question)).toEqual(["Question 4?", "Question 5?", "Question 6?", "Question 7?", "Question 8?"]);
+      expect(result.questions.map((q) => q.question)).toEqual(["Question 6?", "Question 7?", "Question 8?", "Question 9?", "Question 10?"]);
     }
   });
 
@@ -69,7 +70,8 @@ describe("runQuizAttempts", () => {
 
     expect(result.kind).toBe("quiz");
     expect(result.attempts).toBe(2);
-    expect(model.feedback).toEqual([undefined, quizRetryFeedback.unbalanced]);
+    // Every candidate is individually usable here: the pool failed on the tell limit.
+    expect(model.feedback).toEqual([undefined, quizRetryFeedback.unbalanced({ total: 10, failedCharacters: 0, failedWords: 0, usable: 10 })]);
   });
 
   it("retries when too few candidates pass the ratio rule", async () => {
@@ -77,7 +79,7 @@ describe("runQuizAttempts", () => {
     const result = await runQuizAttempts(model.callModel);
 
     expect(result.attempts).toBe(2);
-    expect(model.feedback).toEqual([undefined, quizRetryFeedback.unbalanced]);
+    expect(model.feedback).toEqual([undefined, quizRetryFeedback.unbalanced({ total: 10, failedCharacters: 10, failedWords: 0, usable: 0 })]);
   });
 
   it("retries structurally invalid output with the generic feedback", async () => {
@@ -98,15 +100,17 @@ describe("runQuizAttempts", () => {
   });
 
   it("fails when every attempt is unbalanced, and says the last failure was imbalance", async () => {
-    const model = fakeModel(call(biasedInput()), call(biasedInput()));
+    const model = fakeModel(call(biasedInput()));
     const result = await runQuizAttempts(model.callModel);
 
     expect(result.kind).toBe("failed");
     if (result.kind === "failed") {
       expect(result.failure).toBe("unbalanced");
       expect(result.inputShape).toBeUndefined();
+      expect(result.counts).toEqual({ total: 10, failedCharacters: 0, failedWords: 0, usable: 10 });
     }
-    expect(result.attempts).toBe(2);
+    expect(result.attempts).toBe(3);
+    expect(model.feedback).toHaveLength(3);
   });
 
   it("reports the kind of the last failure, not the first", async () => {
@@ -125,6 +129,44 @@ describe("runQuizAttempts", () => {
     expect(model.feedback).toHaveLength(1);
   });
 
+  it("succeeds on the third attempt after two rejections", async () => {
+    const model = fakeModel(call(biasedInput()), call(unevenInput()), call(balancedInput()));
+    const result = await runQuizAttempts(model.callModel);
+
+    expect(result.kind).toBe("quiz");
+    expect(result.attempts).toBe(3);
+    expect(model.feedback).toEqual([
+      undefined,
+      quizRetryFeedback.unbalanced({ total: 10, failedCharacters: 0, failedWords: 0, usable: 10 }),
+      quizRetryFeedback.unbalanced({ total: 10, failedCharacters: 10, failedWords: 0, usable: 0 }),
+    ]);
+  });
+
+  it("gives up after three rejected attempts and calls the model exactly three times", async () => {
+    const model = fakeModel(call(biasedInput()), call(unevenInput()), call(invalidInput()), call(balancedInput()));
+    const result = await runQuizAttempts(model.callModel);
+
+    expect(result.kind).toBe("failed");
+    expect(result.attempts).toBe(3);
+    expect(model.feedback).toHaveLength(3);
+    if (result.kind === "failed") expect(result.failure).toBe("invalid");
+  });
+
+  it("builds the retry feedback from counts only, never from the question or option text", async () => {
+    const marked = pool((n) => ({
+      question: `LEAK-QUESTION-${n}`,
+      options: [20, 30, 60, 30].map((length, index) => `LEAK-${index}-`.padEnd(length, "x")),
+      correctIndex: 1,
+    }));
+    const model = fakeModel(call(marked), call(balancedInput()));
+    await runQuizAttempts(model.callModel);
+
+    const sent = model.feedback[1] ?? "";
+    expect(sent).toContain("10 questions");
+    expect(sent).toMatch(/10 had options of very different length in characters, 0 in word count, and only 0 were usable/);
+    expect(sent).not.toContain("LEAK");
+  });
+
   it("returns insufficient from a retry too", async () => {
     const model = fakeModel(call(biasedInput()), call({ status: "insufficient", reason: "Too short." }));
     const result = await runQuizAttempts(model.callModel);
@@ -141,7 +183,7 @@ describe("runQuizAttempts", () => {
 
   it("sums usage on failure too, and keeps null when no attempt reported tokens", async () => {
     const failed = await runQuizAttempts(fakeModel(call(biasedInput(), 10, 5), call(biasedInput(), 20, 6)).callModel);
-    expect(failed).toMatchObject({ inputTokens: 30, outputTokens: 11 });
+    expect(failed).toMatchObject({ attempts: 3, inputTokens: 50, outputTokens: 17 }); // the last call repeats for the third attempt
 
     const unknown = await runQuizAttempts(fakeModel(call(balancedInput(), null, null)).callModel);
     expect(unknown).toMatchObject({ inputTokens: null, outputTokens: null });
@@ -150,6 +192,7 @@ describe("runQuizAttempts", () => {
   it("never calls the model more than maxAttempts times", async () => {
     const defaults = fakeModel(call(invalidInput()));
     await runQuizAttempts(defaults.callModel);
+    expect(quiz.maxAttempts).toBe(3);
     expect(defaults.feedback).toHaveLength(quiz.maxAttempts);
 
     const three = fakeModel(call(biasedInput()));
@@ -167,16 +210,16 @@ describe("runQuizAttempts", () => {
     const model = fakeModel(call(biasedInput()), call(biasedInput()));
     await runQuizAttempts(model.callModel, { onRetry: (info) => seen.push(`${info.attempt}:${info.failure}`) });
 
-    expect(seen).toEqual(["1:unbalanced"]);
+    expect(seen).toEqual(["1:unbalanced", "2:unbalanced"]); // three attempts: two retries, none after the last
   });
 
   it("describes the shape of invalid input (keys and types) in onRetry and in the final failure, never the values", async () => {
     const infos: { inputShape?: string; message: string }[] = [];
-    const model = fakeModel(call(invalidInput()), call(invalidInput()));
+    const model = fakeModel(call(invalidInput()));
     const result = await runQuizAttempts(model.callModel, { onRetry: (info) => infos.push(info) });
 
     const expected = "status: string, questions: string, secretNote: string";
-    expect(infos).toHaveLength(1);
+    expect(infos).toHaveLength(2);
     expect(infos[0].inputShape).toBe(expected);
     expect(result.kind === "failed" && result.inputShape).toBe(expected);
     expect(JSON.stringify([infos, result])).not.toContain("do not log this");

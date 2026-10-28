@@ -1,9 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { averageLengthRatio, checkBalance, lengthSpread, longestOptionGuessScore, questionRatioProblem } from "./balance";
+import {
+  averageLengthRatio,
+  checkBalance,
+  describeRejections,
+  lengthSpread,
+  longestOptionGuessScore,
+  questionRatioProblem,
+  summarizeRejections,
+} from "./balance";
 import type { QuizQuestion } from "./types";
 
 // Fixed here, not read from data/quiz.ts, so these tests describe the rules and not today's config.
-const limits = { maxOptionLengthRatio: 1.5, shortOptionExemptChars: 20, maxLengthTellQuestions: 2 };
+// The gaps are 0 here so the ratio rule is tested on its own; the gap rule has its own tests below.
+const limits = {
+  maxOptionLengthRatio: 1.5,
+  maxOptionCharGap: 0,
+  maxOptionWordGap: 0,
+  shortOptionExemptChars: 20,
+  maxLengthTellQuestions: 2,
+};
 
 /** One-word options of exact character lengths ("a" x 26, "b" x 28, ...). Word counts are all 1. */
 function byLength(lengths: number[], correctIndex: number): QuizQuestion {
@@ -152,5 +167,131 @@ describe("averageLengthRatio", () => {
   it("returns 0 for an empty quiz and ignores the answer key", () => {
     expect(averageLengthRatio([])).toBe(0);
     expect(averageLengthRatio([{ options: ["aa", "aaaa"] }])).toBe(2);
+  });
+});
+
+// ---- the gap rule and the rejection summary ----
+
+const gapLimits = {
+  maxOptionLengthRatio: 2,
+  maxOptionCharGap: 30,
+  maxOptionWordGap: 3,
+  shortOptionExemptChars: 20,
+  maxLengthTellQuestions: 1,
+};
+
+/** One option of exactly `chars` characters made of `wordCount` words of one repeated letter. */
+function phrase(wordCount: number, chars: number, letter: string): string {
+  const letters = chars - (wordCount - 1);
+  const sizes = Array.from({ length: wordCount }, (_, i) => Math.floor(letters / wordCount) + (i < letters % wordCount ? 1 : 0));
+  return sizes.map((size) => letter.repeat(size)).join(" ");
+}
+
+/** Four options of the same character length whose word counts are the given ones. */
+function byWords(wordCounts: number[], chars = 40): QuizQuestion {
+  return {
+    question: "Q?",
+    options: wordCounts.map((count, index) => phrase(count, chars, String.fromCharCode(97 + index))),
+    correctIndex: 1,
+  };
+}
+
+describe("questionRatioProblem: the absolute gap rule", () => {
+  it("passes a question over the ratio when the characters differ by at most the gap", () => {
+    // 22 vs 52: ratio 2.36 (over 2.0) but a gap of exactly 30.
+    expect(questionRatioProblem(byLength([22, 25, 28, 52], 1), gapLimits)).toBeNull();
+  });
+
+  it("fails a question over the ratio when the gap is above the limit", () => {
+    // 22 vs 53: ratio 2.4 and a gap of 31.
+    expect(questionRatioProblem(byLength([22, 25, 28, 53], 1), gapLimits)).toBe("characters");
+  });
+
+  it("still passes a question within the ratio however large the gap", () => {
+    expect(questionRatioProblem(byLength([100, 120, 150, 200], 1), gapLimits)).toBeNull();
+  });
+
+  it("passes a words difference of exactly the word gap and fails one word more", () => {
+    // Same character length everywhere, words 1 / 2 / 3 / 4 (ratio 4, gap 3) and 1 / 2 / 3 / 5 (gap 4).
+    expect(questionRatioProblem(byWords([1, 2, 3, 4]), gapLimits)).toBeNull();
+    expect(questionRatioProblem(byWords([1, 2, 3, 5]), gapLimits)).toBe("words");
+  });
+
+  it("checks the characters measure first when both fail", () => {
+    const both: QuizQuestion = {
+      question: "Q?",
+      options: [phrase(1, 22, "a"), phrase(5, 25, "b"), phrase(2, 28, "c"), phrase(3, 60, "d")],
+      correctIndex: 0,
+    };
+    expect(questionRatioProblem(both, gapLimits)).toBe("characters");
+  });
+
+  it("uses the gaps it is given", () => {
+    const strict = { ...gapLimits, maxOptionCharGap: 29 };
+    expect(questionRatioProblem(byLength([22, 25, 28, 52], 1), strict)).toBe("characters");
+  });
+
+  it("leaves the tell rules unchanged: a gap-tolerated question can still be a tell", () => {
+    const tell = byLength([22, 25, 28, 52], 3); // correct is the unique longest
+    expect(checkBalance([tell], gapLimits).ok).toBe(true);
+    const result = checkBalance([tell, tell], gapLimits);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/unique longest/);
+    const shortTell = byLength([22, 40, 45, 50], 0); // correct is the unique shortest
+    expect(checkBalance([shortTell, shortTell], gapLimits).ok).toBe(false);
+  });
+});
+
+describe("summarizeRejections", () => {
+  const charsFail = () => byLength([22, 25, 28, 53], 1);
+  const wordsFail = () => byWords([1, 2, 3, 5]);
+  const bothFail = (): QuizQuestion => ({
+    question: "Q?",
+    options: [phrase(1, 22, "a"), phrase(5, 25, "b"), phrase(2, 28, "c"), phrase(3, 60, "d")],
+    correctIndex: 0,
+  });
+  const fine = () => byLength([26, 28, 30, 32], 1);
+
+  it("counts failures by measure and usable candidates", () => {
+    const counts = summarizeRejections([charsFail(), charsFail(), wordsFail(), fine(), fine(), fine()], gapLimits);
+    expect(counts).toEqual({ total: 6, failedCharacters: 2, failedWords: 1, usable: 3 });
+  });
+
+  it("counts a candidate that fails both measures once, under characters", () => {
+    expect(summarizeRejections([bothFail(), bothFail(), fine()], gapLimits)).toEqual({
+      total: 3,
+      failedCharacters: 2,
+      failedWords: 0,
+      usable: 1,
+    });
+  });
+
+  it("counts exempt short-answer candidates as usable", () => {
+    const short: QuizQuestion = { question: "Q?", options: ["Mutex", "Semaphore", "Monitor", "Spinlock"], correctIndex: 0 };
+    expect(summarizeRejections([short], gapLimits).usable).toBe(1);
+  });
+
+  it("returns all zeros for an empty list", () => {
+    expect(summarizeRejections([], gapLimits)).toEqual({ total: 0, failedCharacters: 0, failedWords: 0, usable: 0 });
+  });
+
+  it("always adds up to the total", () => {
+    const counts = summarizeRejections([charsFail(), wordsFail(), bothFail(), fine()], gapLimits);
+    expect(counts.failedCharacters + counts.failedWords + counts.usable).toBe(counts.total);
+  });
+
+  it("does not modify its input", () => {
+    const pool = [charsFail(), fine()];
+    const snapshot = JSON.stringify(pool);
+    summarizeRejections(pool, gapLimits);
+    expect(JSON.stringify(pool)).toBe(snapshot);
+  });
+});
+
+describe("describeRejections", () => {
+  it("formats numbers only", () => {
+    expect(describeRejections({ total: 8, failedCharacters: 3, failedWords: 2, usable: 3 })).toBe(
+      "8 candidates: 3 failed on characters, 2 on words, 3 usable",
+    );
   });
 });
