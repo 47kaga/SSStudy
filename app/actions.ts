@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import { validateProjectTitle } from "@/lib/project-title";
-import { createProject } from "@/lib/projects";
+import { archiveProject, createProject } from "@/lib/projects";
 import { startSession, stopRunningSession } from "@/lib/sessions";
 
 export type FormState = { error: string | null; value?: string };
@@ -31,6 +31,13 @@ export async function startTimerAction(_previous: StartState, formData: FormData
     return { error: "A timer is already running. Stop it first.", code: "already-running" };
   }
   return { error: "That project no longer exists." };
+}
+
+export async function archiveProjectAction(projectId: number): Promise<void> {
+  // Actions are reachable by direct POST, so validate even though the UI binds a number.
+  if (!Number.isInteger(projectId)) return;
+  await archiveProject(projectId);
+  refresh();
 }
 
 export async function stopTimerAction(): Promise<void> {

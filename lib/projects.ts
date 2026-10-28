@@ -9,7 +9,7 @@ export type ProjectSummary = {
 
 export async function listProjects(): Promise<ProjectSummary[]> {
   const [projects, totals] = await Promise.all([
-    db.project.findMany({ orderBy: { createdAt: "asc" } }),
+    db.project.findMany({ where: { archivedAt: null }, orderBy: { createdAt: "asc" } }),
     db.studySession.groupBy({
       by: ["projectId"],
       where: { endedAt: { not: null } },
@@ -23,4 +23,14 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 
 export async function createProject(title: string): Promise<void> {
   await db.project.create({ data: { title } });
+}
+
+// Archiving keeps the project and its sessions; it only hides the project from lists.
+// A single conditional update makes it a no-op for a missing project, an already archived one,
+// or the project that owns the running session.
+export async function archiveProject(id: number): Promise<void> {
+  await db.project.updateMany({
+    where: { id, archivedAt: null, sessions: { none: { endedAt: null } } },
+    data: { archivedAt: new Date() },
+  });
 }

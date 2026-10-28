@@ -29,6 +29,7 @@ Core loop: Study (timer) -> Quiz (score) -> Reward (shards -> pulls).
 - Keep files small and named by purpose. If unsure where something goes, put it next to the feature that uses it.
 - If a requirement is ambiguous, ask instead of guessing.
 - The guardrails test (`theme/guardrails.test.ts`) must pass. Never bypass it.
+- Always read the SQL of any generated migration before applying it. Prisma does not know about `StudySession_one_running`; never drop it, and keep `prisma/migrations.test.ts` passing.
 
 ## Design constraints (non-negotiable)
 
@@ -54,8 +55,9 @@ Interpretation:
 ## Economy reference (from the design doc)
 
 - Shards earned = (minutes studied / 10) x success rating (0 to 1)
+- Implementation (`lib/economy.ts`, `calculateShards`): shards are whole numbers, floored per session, computed with integer arithmetic from `correctAnswers / totalQuestions` (counts, not a float rating). One session counts at most `maxCountedSecondsPerSession`. Constants live in `data/economy.ts`. Invalid input throws a `RangeError`.
 - Rarity pull rates: Common 70%, Rare 22%, Super Rare 6%, Ultra Rare 2%
-- Anti-abuse (added with the quiz milestone): minimum session length, one quiz per session, daily shard cap.
+- Anti-abuse (added with the quiz milestone): minimum session length, one quiz per session, daily shard cap. These are still planned for Milestone 7 and will extend `calculateShards`'s input.
 - These numbers are starting values and must be easy to change in config.
 
 ## Timer rule
@@ -73,4 +75,4 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 7. Quiz UI wired to rewards, with anti-abuse limits
 8. Auth, deploy, real art, polish
 
-**Current milestone: 3**
+**Current milestone: 4**

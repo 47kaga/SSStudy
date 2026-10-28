@@ -1,4 +1,6 @@
 import { connection } from "next/server";
+import { archiveProjectAction } from "@/app/actions";
+import { Button } from "@/components/Button";
 import { Divider } from "@/components/Divider";
 import { Panel } from "@/components/Panel";
 import { ProjectForm } from "@/components/ProjectForm";
@@ -28,10 +30,20 @@ export default async function StudyPage() {
               {projects.map((project) => (
                 <li
                   key={project.id}
-                  className="flex items-baseline justify-between gap-4 border-b-hairline border-ink py-2 first:border-t-hairline"
+                  className="flex items-center gap-2 border-b-hairline border-ink py-2 first:border-t-hairline md:gap-4"
                 >
-                  <span className="truncate">{project.title}</span>
-                  <span className="tabular-nums">{formatDuration(project.totalSeconds)}</span>
+                  <span className="min-w-0 flex-1 truncate">{project.title}</span>
+                  <span className="shrink-0 tabular-nums">{formatDuration(project.totalSeconds)}</span>
+                  <form action={archiveProjectAction.bind(null, project.id)} className="shrink-0">
+                    <Button
+                      type="submit"
+                      size="small"
+                      aria-label={`Archive ${project.title}`}
+                      disabled={running?.projectId === project.id}
+                    >
+                      Archive
+                    </Button>
+                  </form>
                 </li>
               ))}
             </ul>

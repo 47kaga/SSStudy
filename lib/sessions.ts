@@ -4,6 +4,7 @@ import { elapsedSeconds } from "@/lib/time";
 
 export type RunningSession = {
   id: number;
+  projectId: number;
   projectTitle: string;
   startedAtMs: number;
   /** Server clock when this was read, so the client can correct for its own clock skew. */
@@ -29,6 +30,7 @@ export async function getRunningSession(): Promise<RunningSession | null> {
   if (!session) return null;
   return {
     id: session.id,
+    projectId: session.projectId,
     projectTitle: session.project.title,
     startedAtMs: session.startedAt.getTime(),
     serverNowMs: Date.now(),
