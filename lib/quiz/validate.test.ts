@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { quiz } from "@/data/quiz";
-import { validateModelOutput } from "./validate";
+import { candidateLimits, finalQuizLimits, validateModelOutput } from "./validate";
 
 function makeQuestion(n: number) {
   return {
@@ -13,7 +13,7 @@ function makeQuestion(n: number) {
 function makeOutput() {
   return {
     status: "ok",
-    questions: Array.from({ length: quiz.questionCount }, (_, n) => makeQuestion(n)),
+    questions: Array.from({ length: quiz.candidateQuestions }, (_, n) => makeQuestion(n)),
   };
 }
 
@@ -33,7 +33,7 @@ describe("validateModelOutput: valid quiz", () => {
     const result = validateModelOutput(makeOutput());
     expect(result.kind).toBe("quiz");
     if (result.kind === "quiz") {
-      expect(result.questions).toHaveLength(quiz.questionCount);
+      expect(result.questions).toHaveLength(quiz.candidateQuestions);
       expect(result.questions[1]).toEqual(makeQuestion(1));
     }
   });
@@ -74,6 +74,24 @@ describe("validateModelOutput: counts", () => {
     const tooMany = makeOutput();
     tooMany.questions.push(makeQuestion(9));
     expectInvalid(validateModelOutput(tooMany));
+  });
+
+  it("expects the candidate count by default, not the final quiz size", () => {
+    expect(quiz.candidateQuestions).toBeGreaterThan(quiz.questionCount);
+    expect(validateModelOutput(makeOutput()).kind).toBe("quiz");
+
+    const finalSize = makeOutput();
+    finalSize.questions = finalSize.questions.slice(0, quiz.questionCount);
+    expectInvalid(validateModelOutput(finalSize));
+  });
+
+  it("takes the expected count as a parameter: a final quiz is checked against questionCount", () => {
+    const finalSize = makeOutput();
+    finalSize.questions = finalSize.questions.slice(0, quiz.questionCount);
+
+    expect(validateModelOutput(finalSize, finalQuizLimits).kind).toBe("quiz");
+    expectInvalid(validateModelOutput(makeOutput(), finalQuizLimits));
+    expect(validateModelOutput(makeOutput(), { ...candidateLimits, expectedQuestions: quiz.candidateQuestions }).kind).toBe("quiz");
   });
 
   it("rejects the wrong number of options", () => {
@@ -187,7 +205,7 @@ describe("validateModelOutput: insufficient", () => {
 
 describe("validateModelOutput: custom limits", () => {
   it("uses the limits it is given", () => {
-    const limits = { questionCount: 1, optionsPerQuestion: 2, maxQuestionChars: 20, maxOptionChars: 5, maxReasonChars: 10 };
+    const limits = { expectedQuestions: 1, optionsPerQuestion: 2, maxQuestionChars: 20, maxOptionChars: 5, maxReasonChars: 10 };
     const raw = { status: "ok", questions: [{ question: "Pick one?", options: ["Yes", "No"], correctIndex: 1 }] };
     expect(validateModelOutput(raw, limits).kind).toBe("quiz");
     expect(validateModelOutput(makeOutput(), limits).kind).toBe("invalid");

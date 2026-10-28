@@ -8,21 +8,25 @@ function option(index: number, length: number): string {
   return String.fromCharCode(97 + index).repeat(length);
 }
 
-/** A valid quiz whose correct answer is always at `correctIndex` of LENGTHS (1 = middle, 3 = longest). */
-function quizInput(correctIndex: number) {
-  return {
-    status: "ok",
-    questions: Array.from({ length: quiz.questionCount }, (_, n) => ({
-      question: `Question ${n + 1}?`,
-      options: LENGTHS.map((length, index) => option(index, length)),
-      correctIndex,
-    })),
-  };
+type PoolQuestion = { question: string; options: string[]; correctIndex: number };
+
+function poolQuestion(n: number, lengths: number[], correctIndex: number): PoolQuestion {
+  return { question: `Question ${n + 1}?`, options: lengths.map((length, index) => option(index, length)), correctIndex };
 }
 
-const balancedInput = () => quizInput(1);
-const biasedInput = () => quizInput(3); // correct is the unique longest in every question
-const invalidInput = () => ({ status: "ok", questions: [] });
+/** A candidate pool of `candidateQuestions` questions built by `make`. */
+function pool(make: (n: number) => PoolQuestion) {
+  return { status: "ok", questions: Array.from({ length: quiz.candidateQuestions }, (_, n) => make(n)) };
+}
+
+// Correct answer is a middle-length option: nothing to guess from.
+const balancedInput = () => pool((n) => poolQuestion(n, LENGTHS, 1));
+// Correct answer is the unique longest in every question: no subset can pass the tell limit.
+const biasedInput = () => pool((n) => poolQuestion(n, LENGTHS, 3));
+// Every option set is too uneven for the ratio rule: nothing survives the filter.
+const unevenInput = () => pool((n) => poolQuestion(n, [20, 30, 50, 30], 1));
+// Wrong shape: a string where the questions array belongs.
+const invalidInput = () => ({ status: "ok", questions: "not an array", secretNote: "do not log this" });
 
 function call(toolInput: unknown, inputTokens: number | null = 100, outputTokens: number | null = 50): ModelCall {
   return { toolInput, inputTokens, outputTokens };
@@ -33,27 +37,45 @@ function fakeModel(...calls: ModelCall[]) {
   const feedback: (string | undefined)[] = [];
   const callModel: CallModel = async (given) => {
     feedback.push(given);
-    const next = calls[Math.min(feedback.length - 1, calls.length - 1)];
-    return next;
+    return calls[Math.min(feedback.length - 1, calls.length - 1)];
   };
   return { callModel, feedback };
 }
 
 describe("runQuizAttempts", () => {
-  it("returns a valid balanced quiz on the first attempt with no feedback", async () => {
+  it("keeps questionCount questions from the candidate pool on the first attempt, with no feedback", async () => {
     const model = fakeModel(call(balancedInput()));
     const result = await runQuizAttempts(model.callModel);
 
     expect(result.kind).toBe("quiz");
+    if (result.kind === "quiz") expect(result.questions).toHaveLength(quiz.questionCount);
     expect(result.attempts).toBe(1);
     expect(model.feedback).toEqual([undefined]);
   });
 
-  it("retries a biased quiz with the length feedback, then accepts a balanced one", async () => {
+  it("drops uneven candidates and keeps the balanced ones", async () => {
+    const mixed = pool((n) => (n < 3 ? poolQuestion(n, [20, 30, 50, 30], 1) : poolQuestion(n, LENGTHS, 1)));
+    const result = await runQuizAttempts(fakeModel(call(mixed)).callModel);
+
+    expect(result.kind).toBe("quiz");
+    if (result.kind === "quiz") {
+      expect(result.questions.map((q) => q.question)).toEqual(["Question 4?", "Question 5?", "Question 6?", "Question 7?", "Question 8?"]);
+    }
+  });
+
+  it("retries when selectBalanced finds no balanced subset, with the unbalanced feedback", async () => {
     const model = fakeModel(call(biasedInput()), call(balancedInput()));
     const result = await runQuizAttempts(model.callModel);
 
     expect(result.kind).toBe("quiz");
+    expect(result.attempts).toBe(2);
+    expect(model.feedback).toEqual([undefined, quizRetryFeedback.unbalanced]);
+  });
+
+  it("retries when too few candidates pass the ratio rule", async () => {
+    const model = fakeModel(call(unevenInput()), call(balancedInput()));
+    const result = await runQuizAttempts(model.callModel);
+
     expect(result.attempts).toBe(2);
     expect(model.feedback).toEqual([undefined, quizRetryFeedback.unbalanced]);
   });
@@ -67,12 +89,23 @@ describe("runQuizAttempts", () => {
     expect(model.feedback).toEqual([undefined, quizRetryFeedback.invalid]);
   });
 
-  it("fails when every attempt is biased, and says the last failure was imbalance", async () => {
+  it("treats a final-sized quiz as invalid, because the model is asked for the full candidate pool", async () => {
+    const short = { status: "ok", questions: balancedInput().questions.slice(0, quiz.questionCount) };
+    const result = await runQuizAttempts(fakeModel(call(short)).callModel);
+
+    expect(result.kind).toBe("failed");
+    if (result.kind === "failed") expect(result.failure).toBe("invalid");
+  });
+
+  it("fails when every attempt is unbalanced, and says the last failure was imbalance", async () => {
     const model = fakeModel(call(biasedInput()), call(biasedInput()));
     const result = await runQuizAttempts(model.callModel);
 
     expect(result.kind).toBe("failed");
-    if (result.kind === "failed") expect(result.failure).toBe("unbalanced");
+    if (result.kind === "failed") {
+      expect(result.failure).toBe("unbalanced");
+      expect(result.inputShape).toBeUndefined();
+    }
     expect(result.attempts).toBe(2);
   });
 
@@ -103,7 +136,7 @@ describe("runQuizAttempts", () => {
     const model = fakeModel(call(biasedInput(), 1000, 400), call(balancedInput(), 1100, 450));
     const result = await runQuizAttempts(model.callModel);
 
-    expect(result).toMatchObject({ inputTokens: 2100, outputTokens: 850 });
+    expect(result).toMatchObject({ attempts: 2, inputTokens: 2100, outputTokens: 850 });
   });
 
   it("sums usage on failure too, and keeps null when no attempt reported tokens", async () => {
@@ -135,6 +168,19 @@ describe("runQuizAttempts", () => {
     await runQuizAttempts(model.callModel, { onRetry: (info) => seen.push(`${info.attempt}:${info.failure}`) });
 
     expect(seen).toEqual(["1:unbalanced"]);
+  });
+
+  it("describes the shape of invalid input (keys and types) in onRetry and in the final failure, never the values", async () => {
+    const infos: { inputShape?: string; message: string }[] = [];
+    const model = fakeModel(call(invalidInput()), call(invalidInput()));
+    const result = await runQuizAttempts(model.callModel, { onRetry: (info) => infos.push(info) });
+
+    const expected = "status: string, questions: string, secretNote: string";
+    expect(infos).toHaveLength(1);
+    expect(infos[0].inputShape).toBe(expected);
+    expect(result.kind === "failed" && result.inputShape).toBe(expected);
+    expect(JSON.stringify([infos, result])).not.toContain("do not log this");
+    expect(JSON.stringify([infos, result])).not.toContain("not an array");
   });
 
   it("does not catch errors from the model call", async () => {

@@ -1,18 +1,22 @@
+import { connection } from "next/server";
+import { CollectionGrid } from "@/components/CollectionGrid";
 import { Divider } from "@/components/Divider";
+import { PullPanel } from "@/components/PullPanel";
 import { Screen } from "@/components/Screen";
+import { listInventory } from "@/lib/inventory";
+import { devToolsEnabled, getBalance } from "@/lib/shards";
 
-const cells = Array.from({ length: 12 }, (_, i) => i);
+export default async function CollectionPage() {
+  // Per-request data: never prerender this page at build time.
+  await connection();
 
-export default function CollectionPage() {
+  const [balance, owned] = await Promise.all([getBalance(), listInventory()]);
   return (
     <Screen>
       <h1 className="text-title">Collection</h1>
       <Divider weight="heavy" />
-      <div className="grid grid-cols-3 border-l-hairline border-t-hairline border-ink md:grid-cols-6">
-        {cells.map((cell) => (
-          <div key={cell} className="aspect-square border-b-hairline border-r-hairline border-ink" />
-        ))}
-      </div>
+      <PullPanel balance={balance} devTools={devToolsEnabled()} />
+      <CollectionGrid owned={owned} />
     </Screen>
   );
 }

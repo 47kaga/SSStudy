@@ -66,7 +66,7 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 
 ## Quiz
 
-- Quizzes must not be beatable by option length. Generated questions pass `checkBalance`; do not weaken `maxOptionLengthRatio` or `maxLengthTellQuestions` without asking.
+- Quizzes must not be beatable by option length. The model is asked for `candidateQuestions` (8) questions, ordered best first, and `selectBalanced` keeps the `questionCount` (5) most balanced. Kept questions obey `maxOptionLengthRatio` (2.0, by characters and by words) and `maxLengthTellQuestions` (1, for unique-longest-correct and for unique-shortest-correct). Do not weaken these without asking.
 
 ## Milestones
 
@@ -79,4 +79,4 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 7. Quiz UI wired to rewards and sessions, with anti-abuse limits (minimum session length, one quiz per session, daily shard cap)
 8. Auth, deploy, real art, polish
 
-**Current milestone: 4**
+**Current milestone: 6**

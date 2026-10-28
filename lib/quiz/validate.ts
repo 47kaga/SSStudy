@@ -4,7 +4,8 @@ import { quiz } from "@/data/quiz";
 import type { QuizQuestion } from "./types";
 
 export type ValidationLimits = {
-  questionCount: number;
+  /** Exact number of questions the output must contain. */
+  expectedQuestions: number;
   optionsPerQuestion: number;
   maxQuestionChars: number;
   maxOptionChars: number;
@@ -73,7 +74,13 @@ function parseQuestion(raw: unknown, index: number, limits: ValidationLimits): P
   return { ok: true, question: { question, options, correctIndex } };
 }
 
-export function validateModelOutput(raw: unknown, limits: ValidationLimits = quiz): ModelOutputResult {
+/** What the model is asked for: the candidate pool, from which the final quiz is selected. */
+export const candidateLimits: ValidationLimits = { ...quiz, expectedQuestions: quiz.candidateQuestions };
+
+/** What a finished (selected and stored) quiz must contain. */
+export const finalQuizLimits: ValidationLimits = { ...quiz, expectedQuestions: quiz.questionCount };
+
+export function validateModelOutput(raw: unknown, limits: ValidationLimits = candidateLimits): ModelOutputResult {
   if (!isPlainObject(raw)) return { kind: "invalid", message: "Model output is not an object." };
 
   if (raw.status === "insufficient") {
@@ -84,10 +91,10 @@ export function validateModelOutput(raw: unknown, limits: ValidationLimits = qui
   if (raw.status !== "ok") return { kind: "invalid", message: "Model output has an unknown status." };
 
   if (!Array.isArray(raw.questions)) return { kind: "invalid", message: "Model output has no questions array." };
-  if (raw.questions.length !== limits.questionCount) {
+  if (raw.questions.length !== limits.expectedQuestions) {
     return {
       kind: "invalid",
-      message: `Model returned ${raw.questions.length} questions, expected ${limits.questionCount}.`,
+      message: `Model returned ${raw.questions.length} questions, expected ${limits.expectedQuestions}.`,
     };
   }
 

@@ -6,8 +6,8 @@ import { TextAreaField } from "@/components/Field";
 import { Notice } from "@/components/Notice";
 import { Panel } from "@/components/Panel";
 import { calculateShards } from "@/lib/economy";
-import { longestOptionGuessScore } from "@/lib/quiz/balance";
-import type { GradeResult, PublicQuestion } from "@/lib/quiz/types";
+import { averageLengthRatio, longestOptionGuessScore } from "@/lib/quiz/balance";
+import type { GradeResult, PublicQuestion, QuizQuestion } from "@/lib/quiz/types";
 
 type Meta = {
   model: string;
@@ -47,6 +47,11 @@ function MetaCell({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** The questions the page already has, plus the correct indices from the grade response. */
+function withAnswerKey(questions: PublicQuestion[], grade: GradeResult): QuizQuestion[] {
+  return questions.map((question, index) => ({ ...question, correctIndex: grade.results[index].correctIndex }));
+}
+
 // Limits come in as props so the client bundle never imports the prompt in data/quiz.ts.
 export function QuizLab({ minChars, maxChars }: { minChars: number; maxChars: number }) {
   const [text, setText] = useState("");
@@ -57,6 +62,8 @@ export function QuizLab({ minChars, maxChars }: { minChars: number; maxChars: nu
   const [meta, setMeta] = useState<Meta | null>(null);
   const [answers, setAnswers] = useState<(number | null)[]>([]);
   const [grade, setGrade] = useState<GradeResult | null>(null);
+  // Running tally of the longest-option guess over graded quizzes. Lives in React state only: reload resets it.
+  const [tally, setTally] = useState({ quizzes: 0, guessScore: 0, totalQuestions: 0 });
 
   const length = text.trim().length;
   const hasQuiz = quizId !== null;
@@ -90,7 +97,14 @@ export function QuizLab({ minChars, maxChars }: { minChars: number; maxChars: nu
       setError(errorText(data));
       return;
     }
-    setGrade(data as unknown as GradeResult);
+    const graded = data as unknown as GradeResult;
+    setGrade(graded);
+    const guess = longestOptionGuessScore(withAnswerKey(questions, graded));
+    setTally((current) => ({
+      quizzes: current.quizzes + 1,
+      guessScore: current.guessScore + guess,
+      totalQuestions: current.totalQuestions + graded.totalQuestions,
+    }));
   }
 
   function choose(questionIndex: number, optionIndex: number) {
@@ -107,11 +121,12 @@ export function QuizLab({ minChars, maxChars }: { minChars: number; maxChars: nu
 
   // Measurement only: how a student who always picks the longest option would have done.
   // The correct indices come from the grade response, so this is never computed before grading.
-  const longestGuess = grade
-    ? longestOptionGuessScore(
-        questions.map((question, index) => ({ ...question, correctIndex: grade.results[index].correctIndex })),
-      )
-    : null;
+  const longestGuess = grade ? longestOptionGuessScore(withAnswerKey(questions, grade)) : null;
+
+  // Chance level for the tally: a blind guess among the options of the latest quiz.
+  const optionsPerQuestion = questions[0]?.options.length ?? 1;
+  const averagePerQuiz = (value: number) => (tally.quizzes === 0 ? 0 : value / tally.quizzes).toFixed(2);
+  const averageQuestions = tally.quizzes === 0 ? 0 : tally.totalQuestions / tally.quizzes;
 
   return (
     <div className="grid grid-cols-1 border-l-hairline border-t-hairline border-ink md:grid-cols-2">
@@ -208,7 +223,15 @@ export function QuizLab({ minChars, maxChars }: { minChars: number; maxChars: nu
               60 min session at this score: {shardPreview} {shardPreview === 1 ? "shard" : "shards"}
             </p>
             <p className="text-caption tabular-nums">
-              Longest-option guess would have scored {longestGuess} / {grade.totalQuestions}
+              Longest-option guess: {longestGuess} / {grade.totalQuestions}
+            </p>
+            <p className="text-caption tabular-nums">
+              Longest-option guess across {tally.quizzes} {tally.quizzes === 1 ? "quiz" : "quizzes"}: average{" "}
+              {averagePerQuiz(tally.guessScore)} / {averageQuestions} (chance is about{" "}
+              {(averageQuestions / optionsPerQuestion).toFixed(2)})
+            </p>
+            <p className="text-caption tabular-nums">
+              Average longest-to-shortest option ratio: {averageLengthRatio(questions).toFixed(1)}
             </p>
           </div>
         ) : null}

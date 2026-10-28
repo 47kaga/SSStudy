@@ -34,6 +34,11 @@ function secureRandom(): number {
   return randomInt(RANDOM_RANGE) / RANDOM_RANGE;
 }
 
+/** Keys and value types of invalid tool input, for the log. Never the values themselves. */
+function shapeNote(inputShape: string | undefined): string {
+  return inputShape ? ` Tool input was { ${inputShape} }.` : "";
+}
+
 function failure(code: "model-failure"): GenerateResult {
   return { ok: false, code, message: "Quiz generation failed. Try again." };
 }
@@ -103,8 +108,8 @@ export async function generateQuiz(sourceText: string): Promise<GenerateResult> 
   let result;
   try {
     result = await runQuizAttempts(callModel, {
-      onRetry: ({ attempt, failure: kind, message }) =>
-        console.error(`[quiz] Attempt ${attempt} rejected (${kind}): ${message} Retrying.`),
+      onRetry: ({ attempt, failure: kind, message, inputShape }) =>
+        console.error(`[quiz] Attempt ${attempt} rejected (${kind}): ${message}${shapeNote(inputShape)} Retrying.`),
     });
   } catch (error) {
     if (error instanceof ModelRequestError) return failure("model-failure");
@@ -116,7 +121,9 @@ export async function generateQuiz(sourceText: string): Promise<GenerateResult> 
     return { ok: false, code: "insufficient", message: result.reason };
   }
   if (result.kind === "failed") {
-    console.error(`[quiz] Gave up after ${result.attempts} attempts (${result.failure}): ${result.message}`);
+    console.error(
+      `[quiz] Gave up after ${result.attempts} attempts (${result.failure}): ${result.message}${shapeNote(result.inputShape)}`,
+    );
     return failure("model-failure");
   }
 

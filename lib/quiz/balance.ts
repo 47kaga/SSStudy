@@ -1,5 +1,5 @@
 // Pure option-length checks. No React, Next, Prisma, SDK or server-only imports, and no data imports,
-// so the lab page can use longestOptionGuessScore in the browser without pulling in the prompt.
+// so the lab page can use the measurement functions in the browser without pulling in the prompt.
 import type { QuizQuestion } from "./types";
 
 export type BalanceLimits = {
@@ -29,6 +29,20 @@ function uniqueShortestIndex(options: string[]): number | null {
 }
 
 /**
+ * The per-question ratio rule: null when the question's options are close enough in length, otherwise
+ * which measure failed. Skipped when the longest option is at most `shortOptionExemptChars` long.
+ */
+export function questionRatioProblem(question: QuizQuestion, limits: BalanceLimits): "characters" | "words" | null {
+  const chars = question.options.map((option) => option.length);
+  if (Math.max(...chars) <= limits.shortOptionExemptChars) return null;
+
+  if (Math.max(...chars) > limits.maxOptionLengthRatio * Math.min(...chars)) return "characters";
+  const words = question.options.map(wordCount);
+  if (Math.max(...words) > limits.maxOptionLengthRatio * Math.min(...words)) return "words";
+  return null;
+}
+
+/**
  * Fails a quiz whose answers can be guessed from option length: a question whose options differ too much
  * in length or word count, or a correct answer that is too often the unique longest or unique shortest.
  */
@@ -37,17 +51,9 @@ export function checkBalance(questions: QuizQuestion[], limits: BalanceLimits): 
   let uniqueShortestCorrect = 0;
 
   for (const [index, question] of questions.entries()) {
-    const label = `Question ${index + 1}`;
-    const chars = question.options.map((option) => option.length);
-    const words = question.options.map(wordCount);
-
-    if (Math.max(...chars) > limits.shortOptionExemptChars) {
-      if (Math.max(...chars) > limits.maxOptionLengthRatio * Math.min(...chars)) {
-        return { ok: false, message: `${label} has options of very different length (by characters).` };
-      }
-      if (Math.max(...words) > limits.maxOptionLengthRatio * Math.min(...words)) {
-        return { ok: false, message: `${label} has options of very different length (by words).` };
-      }
+    const problem = questionRatioProblem(question, limits);
+    if (problem) {
+      return { ok: false, message: `Question ${index + 1} has options of very different length (by ${problem}).` };
     }
 
     if (uniqueLongestIndex(question.options) === question.correctIndex) uniqueLongestCorrect += 1;
@@ -70,9 +76,32 @@ export function checkBalance(questions: QuizQuestion[], limits: BalanceLimits): 
 }
 
 /**
+ * How uneven one question's options are: longest / shortest by characters plus the same by words.
+ * 2 is perfectly even; higher is worse. Used to rank questions, not to reject them.
+ */
+export function lengthSpread(question: QuizQuestion): number {
+  const chars = question.options.map((option) => option.length);
+  const words = question.options.map(wordCount);
+  return Math.max(...chars) / Math.min(...chars) + Math.max(...words) / Math.min(...words);
+}
+
+/**
  * How many questions always picking the unique longest option (by characters) would get right.
  * Ties for longest count as wrong. Used for measurement only, never to reject a quiz.
  */
 export function longestOptionGuessScore(questions: QuizQuestion[]): number {
   return questions.filter((question) => uniqueLongestIndex(question.options) === question.correctIndex).length;
+}
+
+/**
+ * Mean over questions of (longest option / shortest option) by characters. 1 means every question has
+ * equal-length options. Returns 0 for an empty quiz. Measurement only.
+ */
+export function averageLengthRatio(questions: { options: string[] }[]): number {
+  if (questions.length === 0) return 0;
+  const total = questions.reduce((sum, question) => {
+    const chars = question.options.map((option) => option.length);
+    return sum + Math.max(...chars) / Math.min(...chars);
+  }, 0);
+  return total / questions.length;
 }

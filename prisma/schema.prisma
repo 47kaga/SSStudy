@@ -44,3 +44,18 @@ model Quiz {
   correctAnswers Int?
   totalQuestions Int
 }
+
+// Append-only. The shard balance is the sum of amounts. Never edit or delete rows.
+model ShardLedger {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  amount    Int // positive = earned or granted, negative = spent
+  reason    String // for example "dev-grant" or "pull:<itemKey>"
+}
+
+model InventoryItem {
+  id              Int      @id @default(autoincrement())
+  itemKey         String   @unique
+  count           Int
+  firstObtainedAt DateTime @default(now())
+}
