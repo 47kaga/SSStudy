@@ -64,6 +64,10 @@ Interpretation:
 
 The timer stores a start timestamp and computes elapsed time from it. Never count by incrementing a counter in an interval, so a refresh, tab sleep or closed laptop does not lose or inflate time.
 
+## Quiz
+
+- Quizzes must not be beatable by option length. Generated questions pass `checkBalance`; do not weaken `maxOptionLengthRatio` or `maxLengthTellQuestions` without asking.
+
 ## Milestones
 
 1. Skeleton and design tokens (done)

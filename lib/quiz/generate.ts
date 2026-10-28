@@ -3,17 +3,20 @@ import { randomInt } from "node:crypto";
 import { quiz, quizSystemPrompt, quizTool, quizToolName } from "@/data/quiz";
 import { db } from "@/lib/db";
 import { getAnthropic, MissingApiKeyError } from "./anthropic";
+import { runQuizAttempts, type CallModel } from "./attempts";
 import { buildMaterialMessage } from "./prompt";
 import { toPublicQuiz } from "./public";
 import { shuffleOptions } from "./shuffle";
 import type { PublicQuestion } from "./types";
-import { validateModelOutput } from "./validate";
 
 export type QuizMeta = {
   model: string;
+  /** Total time across all attempts. */
   latencyMs: number;
+  /** Summed across all attempts. */
   inputTokens: number | null;
   outputTokens: number | null;
+  attempts: number;
 };
 
 export type GenerateResult =
@@ -22,6 +25,9 @@ export type GenerateResult =
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANDOM_RANGE = 2 ** 32;
+
+/** The Anthropic request itself failed (network, API error, timeout). Not retried. */
+class ModelRequestError extends Error {}
 
 // Uniform float in [0, 1) from the OS random source, used only to shuffle option order.
 function secureRandom(): number {
@@ -54,54 +60,72 @@ export async function generateQuiz(sourceText: string): Promise<GenerateResult> 
     throw error;
   }
 
+  let modelName: string = quiz.model;
+  const callModel: CallModel = async (feedback) => {
+    let message;
+    try {
+      message = await client.messages.create(
+        {
+          model: quiz.model,
+          max_tokens: quiz.maxOutputTokens,
+          system: quizSystemPrompt,
+          tools: [quizTool],
+          tool_choice: { type: "tool", name: quizToolName },
+          messages: [{ role: "user", content: buildMaterialMessage(sourceText, feedback) }],
+        },
+        { timeout: quiz.requestTimeoutMs },
+      );
+    } catch (error) {
+      // Log details server-side only; never put them in the response.
+      console.error("[quiz] Anthropic request failed:", error instanceof Error ? error.message : "unknown error");
+      throw new ModelRequestError();
+    }
+    modelName = message.model;
+
+    // A cut-off or tool-less response is treated as invalid output, so it can be retried.
+    let toolInput: unknown;
+    if (message.stop_reason === "max_tokens") {
+      console.error("[quiz] Model output was cut off by max_tokens.");
+    } else {
+      const toolCall = message.content.find((block) => block.type === "tool_use" && block.name === quizToolName);
+      if (toolCall && toolCall.type === "tool_use") toolInput = toolCall.input;
+      else console.error("[quiz] Response had no submit_quiz tool call.");
+    }
+
+    return {
+      toolInput,
+      inputTokens: message.usage?.input_tokens ?? null,
+      outputTokens: message.usage?.output_tokens ?? null,
+    };
+  };
+
   const startedAt = Date.now();
-  let message;
+  let result;
   try {
-    message = await client.messages.create(
-      {
-        model: quiz.model,
-        max_tokens: quiz.maxOutputTokens,
-        system: quizSystemPrompt,
-        tools: [quizTool],
-        tool_choice: { type: "tool", name: quizToolName },
-        messages: [{ role: "user", content: buildMaterialMessage(sourceText) }],
-      },
-      { timeout: quiz.requestTimeoutMs },
-    );
+    result = await runQuizAttempts(callModel, {
+      onRetry: ({ attempt, failure: kind, message }) =>
+        console.error(`[quiz] Attempt ${attempt} rejected (${kind}): ${message} Retrying.`),
+    });
   } catch (error) {
-    // Log details server-side only; never put them in the response.
-    console.error("[quiz] Anthropic request failed:", error instanceof Error ? error.message : "unknown error");
-    return failure("model-failure");
+    if (error instanceof ModelRequestError) return failure("model-failure");
+    throw error;
   }
   const latencyMs = Date.now() - startedAt;
 
-  if (message.stop_reason === "max_tokens") {
-    console.error("[quiz] Model output was cut off by max_tokens.");
+  if (result.kind === "insufficient") {
+    return { ok: false, code: "insufficient", message: result.reason };
+  }
+  if (result.kind === "failed") {
+    console.error(`[quiz] Gave up after ${result.attempts} attempts (${result.failure}): ${result.message}`);
     return failure("model-failure");
   }
 
-  const toolCall = message.content.find((block) => block.type === "tool_use" && block.name === quizToolName);
-  if (!toolCall || toolCall.type !== "tool_use") {
-    console.error("[quiz] Response had no submit_quiz tool call.");
-    return failure("model-failure");
-  }
-
-  const output = validateModelOutput(toolCall.input);
-  if (output.kind === "insufficient") {
-    return { ok: false, code: "insufficient", message: output.reason };
-  }
-  if (output.kind === "invalid") {
-    console.error("[quiz] Model output failed validation:", output.message);
-    return failure("model-failure");
-  }
-
-  const shuffled = output.questions.map((question) => shuffleOptions(question, secureRandom));
-  const inputTokens = message.usage?.input_tokens ?? null;
-  const outputTokens = message.usage?.output_tokens ?? null;
+  const shuffled = result.questions.map((question) => shuffleOptions(question, secureRandom));
+  const { inputTokens, outputTokens, attempts } = result;
 
   const row = await db.quiz.create({
     data: {
-      model: message.model,
+      model: modelName,
       questionsJson: JSON.stringify(shuffled),
       sourceChars: sourceText.length,
       inputTokens,
@@ -115,6 +139,6 @@ export async function generateQuiz(sourceText: string): Promise<GenerateResult> 
     ok: true,
     quizId: row.id,
     publicQuiz: toPublicQuiz(shuffled),
-    meta: { model: message.model, latencyMs, inputTokens, outputTokens },
+    meta: { model: modelName, latencyMs, inputTokens, outputTokens, attempts },
   };
 }

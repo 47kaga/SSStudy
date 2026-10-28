@@ -6,9 +6,16 @@ import { TextAreaField } from "@/components/Field";
 import { Notice } from "@/components/Notice";
 import { Panel } from "@/components/Panel";
 import { calculateShards } from "@/lib/economy";
+import { longestOptionGuessScore } from "@/lib/quiz/balance";
 import type { GradeResult, PublicQuestion } from "@/lib/quiz/types";
 
-type Meta = { model: string; latencyMs: number; inputTokens: number | null; outputTokens: number | null };
+type Meta = {
+  model: string;
+  latencyMs: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  attempts: number;
+};
 
 // Lab-only preview: what this score would earn from a one-hour session.
 const PREVIEW_SESSION_SECONDS = 3600;
@@ -98,6 +105,14 @@ export function QuizLab({ minChars, maxChars }: { minChars: number; maxChars: nu
       })
     : null;
 
+  // Measurement only: how a student who always picks the longest option would have done.
+  // The correct indices come from the grade response, so this is never computed before grading.
+  const longestGuess = grade
+    ? longestOptionGuessScore(
+        questions.map((question, index) => ({ ...question, correctIndex: grade.results[index].correctIndex })),
+      )
+    : null;
+
   return (
     <div className="grid grid-cols-1 border-l-hairline border-t-hairline border-ink md:grid-cols-2">
       <Panel title="Material">
@@ -121,11 +136,12 @@ export function QuizLab({ minChars, maxChars }: { minChars: number; maxChars: nu
 
       <Panel title="Quiz">
         {meta ? (
-          <div className="grid grid-cols-2 border-l-hairline border-t-hairline border-ink md:grid-cols-4">
+          <div className="grid grid-cols-2 border-l-hairline border-t-hairline border-ink md:grid-cols-5">
             <MetaCell label="Model" value={meta.model} />
             <MetaCell label="Latency" value={`${meta.latencyMs} ms`} />
             <MetaCell label="Input tokens" value={String(meta.inputTokens ?? "n/a")} />
             <MetaCell label="Output tokens" value={String(meta.outputTokens ?? "n/a")} />
+            <MetaCell label="Attempts" value={String(meta.attempts)} />
           </div>
         ) : null}
 
@@ -190,6 +206,9 @@ export function QuizLab({ minChars, maxChars }: { minChars: number; maxChars: nu
             </p>
             <p className="text-caption">
               60 min session at this score: {shardPreview} {shardPreview === 1 ? "shard" : "shards"}
+            </p>
+            <p className="text-caption tabular-nums">
+              Longest-option guess would have scored {longestGuess} / {grade.totalQuestions}
             </p>
           </div>
         ) : null}
