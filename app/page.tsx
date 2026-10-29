@@ -5,6 +5,7 @@ import { Divider } from "@/components/Divider";
 import { Panel } from "@/components/Panel";
 import { ProjectForm } from "@/components/ProjectForm";
 import { RecentSessions } from "@/components/RecentSessions";
+import { RoomScene } from "@/components/RoomScene";
 import { Screen } from "@/components/Screen";
 import { TimerPanel } from "@/components/TimerPanel";
 import { quiz } from "@/data/quiz";
@@ -22,6 +23,15 @@ export default async function StudyPage() {
     <Screen>
       <h1 className="text-title">Study</h1>
       <Divider weight="heavy" />
+      <div className="border-l-hairline border-t-hairline border-ink">
+        {/* No side padding: the room is 320px wide on phones and must fit inside a phone screen. */}
+        <section className="flex flex-col gap-4 border-b-hairline border-r-hairline border-ink py-4 md:py-6">
+          <h2 className="px-4 text-label uppercase md:px-6">Room</h2>
+          <div className="flex justify-center">
+            <RoomScene studying={running !== null} />
+          </div>
+        </section>
+      </div>
       <div className="grid grid-cols-1 border-l-hairline border-t-hairline border-ink md:grid-cols-2">
         <Panel title="Timer">
           <TimerPanel projects={projects.map(({ id, title }) => ({ id, title }))} running={running} devTools={devToolsEnabled()}

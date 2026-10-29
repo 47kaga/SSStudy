@@ -18,8 +18,8 @@ export type Rarity = {
   pips: number;
   /** Item-text color tier: a key of the rarity palette in theme/tokens.ts. */
   tier: number;
-  /** Shows the last-pull hero panel filled with ink (light text) instead of the plain page color. */
-  darkPanel: boolean;
+  /** The Last pull panel gets a heavy (3px) border in the rarity color, inside its normal ink hairline border. */
+  heavyBorder: boolean;
 };
 
 /** Everything the page needs to show one pull. Built on the server from the rolled item. */
@@ -31,7 +31,7 @@ export type PullDisplay = {
   pips: number;
   border: BorderWeight;
   tier: number;
-  darkPanel: boolean;
+  heavyBorder: boolean;
   isNew: boolean;
 };
 
@@ -111,7 +111,7 @@ export function pullDisplay(data: GachaData, item: GachaItem, isNew: boolean): P
     pips: rarity.pips,
     border: rarity.border,
     tier: rarity.tier,
-    darkPanel: rarity.darkPanel,
+    heavyBorder: rarity.heavyBorder,
     isNew,
   };
 }

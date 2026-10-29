@@ -49,7 +49,7 @@ export function CollectionGrid({ owned }: { owned: OwnedItem[] }) {
             </div>
             <div className="flex items-end justify-between gap-1">
               <p className="min-w-0 wrap-anywhere text-caption">
-                <ItemName tier={rarity.tier}>{item.name}</ItemName>
+                <ItemName tier={rarity.tier} size="small">{item.name}</ItemName>
               </p>
               {count > 1 ? <span className="shrink-0 text-caption tabular-nums">x{count}</span> : null}
             </div>

@@ -22,6 +22,15 @@ export const spacing = {
 
 const systemFonts = ["system-ui", "-apple-system", '"Segoe UI"', "Roboto", "sans-serif"];
 
+// The pixel room is 160 by 96 logical pixels (10 by 6 tiles of 16). It is shown at a whole-number scale only:
+// 2x below the md breakpoint and 4x from md up. Used as spacing keys, so `w-room-phone-w` and friends exist.
+export const roomSize = {
+  "room-phone-w": "320px",
+  "room-phone-h": "192px",
+  "room-desktop-w": "640px",
+  "room-desktop-h": "384px",
+} as const;
+
 export const fontFamily = {
   sans: systemFonts,
   // Item names and rarity words. The same system stack today, so no font file is involved.
@@ -48,6 +57,16 @@ export const rarityPalette = {
 } as const satisfies Record<number, string>;
 
 export type RarityTier = keyof typeof rarityPalette;
+
+// Outline of item text, by size. The stroke is painted behind the fill, so only half of its width shows
+// outside the letters. Small text (caption size) needs a thinner stroke or the letters fill in.
+// These are the only place the values live; .item-text in app/globals.css reads the stroke from a variable.
+export const itemTextOutline = {
+  small: { stroke: "1.5px", letterSpacing: "0.01em" },
+  large: { stroke: "3px", letterSpacing: "0em" },
+} as const;
+
+export type ItemTextSize = keyof typeof itemTextOutline;
 
 type TextStyle = [size: string, style: { lineHeight: string; letterSpacing?: string; fontWeight?: string }];
 
@@ -78,7 +97,9 @@ export const backdropBlur = {
 export const tokens = {
   colors,
   rarityPalette,
+  itemTextOutline,
   spacing,
+  roomSize,
   fontFamily,
   fontSize,
   borderWidth,

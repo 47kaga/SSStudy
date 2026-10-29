@@ -159,14 +159,14 @@ describe("the real data", () => {
 });
 
 describe("rarity display data", () => {
-  it("uses the planned border weight, pips and text tier per rarity, with only Ultra Rare on the ink panel", () => {
+  it("uses the planned border weight, pips and text tier per rarity, with the heavy Last pull border on Super Rare and Ultra Rare only", () => {
     const shown = Object.fromEntries(
-      gachaData.rarities.map((rarity) => [rarity.id, [rarity.border, rarity.pips, rarity.tier, rarity.darkPanel]]),
+      gachaData.rarities.map((rarity) => [rarity.id, [rarity.border, rarity.pips, rarity.tier, rarity.heavyBorder]]),
     );
     expect(shown).toEqual({
       common: ["hairline", 1, 0, false],
       rare: ["medium", 2, 2, false],
-      "super-rare": ["heavy", 3, 5, false],
+      "super-rare": ["heavy", 3, 5, true],
       "ultra-rare": ["heavy", 4, 11, true],
     });
   });
@@ -183,7 +183,7 @@ describe("pullDisplay", () => {
       pips: 4,
       border: "heavy",
       tier: 11,
-      darkPanel: true,
+      heavyBorder: true,
       isNew: true,
     });
   });
@@ -197,8 +197,8 @@ describe("validateGachaData", () => {
   const palette = { 0: "#FFFFFF", 3: "#FFC896" };
   const valid: GachaData = {
     rarities: [
-      { id: "low", label: "Low", mark: "L", weight: 80, border: "hairline", pips: 1, tier: 0, darkPanel: false },
-      { id: "high", label: "High", mark: "H", weight: 20, border: "heavy", pips: 4, tier: 3, darkPanel: true },
+      { id: "low", label: "Low", mark: "L", weight: 80, border: "hairline", pips: 1, tier: 0, heavyBorder: false },
+      { id: "high", label: "High", mark: "H", weight: 20, border: "heavy", pips: 4, tier: 3, heavyBorder: true },
     ],
     items: [
       { key: "a", name: "A", rarity: "low" },

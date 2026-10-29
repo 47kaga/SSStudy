@@ -41,17 +41,21 @@ Core loop: Study (timer) -> Quiz (score) -> Reward (shards -> pulls).
 Interpretation:
 
 - The 3-color limit applies to the UI chrome (backgrounds, text, lines, buttons). Collectible artwork is the only exception and may use its own palette.
-- Rarity is shown with border weight (hairline, medium, heavy), pips (small flat squares in the corner) and the color of the item text. The item-text colors come from `rarityPalette` in `theme/tokens.ts` (Terraria's tiers 0 to 11, flat hex, starting values to tune) and apply only to item names, rarity words and pips. They are not UI colors, like collectible artwork. Item text is bold with a dark outline (`.item-text` in `app/globals.css`), drawn by `components/ItemName.tsx`; pips use the same color with a hairline ink outline. Each rarity in `data/gacha.ts` has a `tier`, and `validateGachaData` throws if a tier is missing from the palette. Do not add custom (gradient) tiers 12 to 15.
+- Rarity is shown with border weight (hairline, medium, heavy), pips (small flat squares in the corner) and the color of the item text. The item-text colors come from `rarityPalette` in `theme/tokens.ts` (Terraria's tiers 0 to 11, flat hex, starting values to tune) and apply only to item names, rarity words and pips. They are not UI colors, like collectible artwork. **Rarity colors are used for item names, rarity words, pips, and the Last pull panel border only. Nothing else.** Item text is bold with a dark outline (`.item-text` in `app/globals.css`), drawn by `components/ItemName.tsx`, whose `size` prop (`small` for caption-size text, `large` for the Last pull name) picks the outline width and letter spacing from `itemTextOutline` in `theme/tokens.ts`. Pips use the same color with a hairline ink outline. The Last pull panel is always the normal light panel; rarities with `heavyBorder` (Super Rare, Ultra Rare) get a heavy (3px) border in their rarity color inside the normal ink hairline border. The border is static: any flashing belongs to the pull scene. Each rarity in `data/gacha.ts` has a `tier`, and `validateGachaData` throws if a tier is missing from the palette. Do not add custom (gradient) tiers 12 to 15.
 - Item text uses `fontFamily.item`, which is the system stack today. It is an exception to "system fonts only" only if and when the user chooses a font. Do not add a font file or web font on your own.
 - Tailwind's default palette is disabled. The theme defines only the 3 token colors, so off-palette classes simply do not exist.
 - All colors, spacing, and type sizes come from the theme. No inline hex values, arbitrary Tailwind values (`[#fff]`, `[13px]`) or magic numbers in components.
 - No box-shadow, glow or gradient effects. Blur is allowed only on the modal backdrop (`components/Modal.tsx`, the `backdropBlur` token). No other blur, glow or shadow; the guardrails test fails if a blur class appears anywhere else. Animations are flat and simple (scale, fade, translate), and the modal has none.
 
-## Pixel art rules
+## Pixel art
 
-- Render sprites with `image-rendering: pixelated` and at integer multiples of their native size.
-- Until real art exists, use silhouettes and text-labeled placeholders. Placeholder sprites may be small palette-index grids rendered as flat squares.
-- Do not generate or embed binary art assets unless the prompt says to.
+- Sprites and the room layout are data in `data/sprites.ts` (rows of characters, `.` transparent, a small palette per sprite). Pure logic is in `lib/sprite.ts`; components are `PixelSprite` and `RoomScene`.
+- One tile is 16px. The room is 10 by 6 tiles (160 by 96 logical pixels).
+- Scale is a whole number only: 2x below `md` (phone), 4x from `md` up, through the `roomSize` tokens in `theme/tokens.ts`. Never a fractional scale.
+- Render with SVG and `shape-rendering="crispEdges"`. No canvas, no image files.
+- Sprite and room palettes are exempt from the 3-color rule, like collectible art. Hex values only in `data/sprites.ts`.
+- Art is placeholder until Milestone 11. Do not generate or embed binary art assets unless the prompt says to.
+- No animation beyond sprite frames (2 frames per pose, 500 ms each). Sprite frames stop under `prefers-reduced-motion` and while the page is hidden. The room shows only whether a timer is running; it reads no clock.
 
 ## Economy reference (from the design doc)
 
@@ -86,15 +90,14 @@ The timer stores a start timestamp and computes elapsed time from it. Never coun
 5. Gacha core (done)
 6. Close the loop: a finished session unlocks one quiz, the quiz score awards shards, with anti-abuse limits and dev testing tools (done)
 6b. Quality-of-life before the room: quiz reliability (length-gap rules, 10 candidates, 3 attempts), the "Test yourself now?" popup, and Terraria-style item text (done)
-7. Room scene v1: pixel sprite component, fixed tile room, starter desk, character with idle and studying states driven by the running timer, timer HUD
+7. Room scene v1: pixel sprite component, 16px tiles, a fixed 10 by 6 tile room, character with idle and studying states driven by the running timer (done)
 
-**Current milestone: 7**
+**Current milestone: 8**
 
 ## Planned
 
 Not started. Do not build any of this before its milestone.
 
-- 7. Room scene v1: pixel sprite component, 16px tiles, a fixed tile room, 2 character states (idle, studying) driven by the running timer.
 - 8. Materials: saved notes and uploaded files per project, text extracted and stored per page, quizzes built from a chosen page range, images transcribed once, cost controls.
 - 9. Room items and equipping, plus an item detail dialog (type, count, rarity, pull date from ledger rows, description) that reuses `Modal`.
 - 10. Case-opening pull scene.

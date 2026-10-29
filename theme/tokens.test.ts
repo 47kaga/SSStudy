@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { borderWidth, colors, fontFamily, rarityPalette, spacing } from "./tokens";
+import { room } from "@/data/sprites";
+import { borderWidth, colors, fontFamily, itemTextOutline, rarityPalette, roomSize, spacing } from "./tokens";
 
 describe("design tokens", () => {
   it("defines exactly three colors", () => {
@@ -37,6 +38,22 @@ describe("design tokens", () => {
     it("keeps item-text colors out of the three UI colors", () => {
       expect(Object.keys(colors)).toHaveLength(3);
     });
+  });
+
+  it("outlines small item text thinner than large item text", () => {
+    expect(parseFloat(itemTextOutline.small.stroke)).toBeLessThan(parseFloat(itemTextOutline.large.stroke));
+    for (const { stroke } of Object.values(itemTextOutline)) expect(stroke).toMatch(/^\d+(\.\d+)?px$/);
+  });
+
+  it("sizes the room as the logical size times a whole number: 2x on phones, 4x on desktop", () => {
+    const logicalWidth = room.cols * room.tileSize;
+    const logicalHeight = room.rows * room.tileSize;
+    const px = (value: string) => Number(value.replace("px", ""));
+    expect(px(roomSize["room-phone-w"]) / logicalWidth).toBe(2);
+    expect(px(roomSize["room-phone-h"]) / logicalHeight).toBe(2);
+    expect(px(roomSize["room-desktop-w"]) / logicalWidth).toBe(4);
+    expect(px(roomSize["room-desktop-h"]) / logicalHeight).toBe(4);
+    for (const value of Object.values(roomSize)) expect(Number.isInteger(px(value) / room.tileSize)).toBe(true);
   });
 
   it("sets item text in the system font stack, with no font file", () => {

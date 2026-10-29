@@ -9,13 +9,13 @@ export const gacha = {
 // Weights are integers out of 100 (checked by validateGachaData).
 // Rarity is shown by border weight, pips (small squares) and the color of the item text. `tier` picks the
 // text color from rarityPalette in theme/tokens.ts (Terraria's ladder: 0 white, 2 green, 5 pink, 11 purple).
-// Only Ultra Rare gets the ink-filled hero panel.
+// Super Rare and Ultra Rare (heavyBorder) get a heavy border in their rarity color on the Last pull panel.
 export const gachaData: GachaData = {
   rarities: [
-    { id: "common", label: "Common", mark: "C", weight: 70, border: "hairline", pips: 1, tier: 0, darkPanel: false },
-    { id: "rare", label: "Rare", mark: "R", weight: 22, border: "medium", pips: 2, tier: 2, darkPanel: false },
-    { id: "super-rare", label: "Super Rare", mark: "SR", weight: 6, border: "heavy", pips: 3, tier: 5, darkPanel: false },
-    { id: "ultra-rare", label: "Ultra Rare", mark: "UR", weight: 2, border: "heavy", pips: 4, tier: 11, darkPanel: true },
+    { id: "common", label: "Common", mark: "C", weight: 70, border: "hairline", pips: 1, tier: 0, heavyBorder: false },
+    { id: "rare", label: "Rare", mark: "R", weight: 22, border: "medium", pips: 2, tier: 2, heavyBorder: false },
+    { id: "super-rare", label: "Super Rare", mark: "SR", weight: 6, border: "heavy", pips: 3, tier: 5, heavyBorder: true },
+    { id: "ultra-rare", label: "Ultra Rare", mark: "UR", weight: 2, border: "heavy", pips: 4, tier: 11, heavyBorder: true },
   ],
   // Original placeholder items. Order here is the grid order and the item number shown for unowned cells.
   items: [
